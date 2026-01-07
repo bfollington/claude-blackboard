@@ -84,7 +84,7 @@ I recommend using Base (https://menial.co.uk/base/) on macOS to view the state o
 ```
 blackboard/
 ├── .claude-plugin/
-│   └── plugin.json          # Plugin manifest
+│   └── marketplace.json     # Marketplace manifest
 ├── commands/                 # Slash commands
 │   ├── crumb.md
 │   ├── reflect.md
