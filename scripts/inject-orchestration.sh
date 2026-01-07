@@ -34,6 +34,7 @@ The plan "PLAN_DESC_PLACEHOLDER" has been stored in the blackboard. Now execute 
    - Spawn Task tools with the implementer subagent
    - Pass explicitly in the prompt: plan_id="PLAN_ID_PLACEHOLDER" and the step_id(s) being worked on
    - Subagents will record breadcrumbs using the crumb.sh script
+   - ALWAYS use a subagent, even for trivial, serial changes to conserve the root context window
 
 3. **Context continuity**: Before spawning each batch, query recent breadcrumbs:
    ```bash
