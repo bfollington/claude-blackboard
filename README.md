@@ -18,7 +18,7 @@ Creates a persistent database that stores:
 
 ```bash
 # In Claude Code, add the marketplace
-/plugin marketplace add github:bfollington/claude-blackboard
+/plugin marketplace add bfollington/claude-blackboard
 
 # Install the plugin
 /plugin install blackboard@bfollington
