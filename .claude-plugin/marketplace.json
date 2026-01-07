@@ -15,7 +15,7 @@
         "name": "bfollington",
         "url": "https://github.com/bfollington"
       },
-      "source": "..",
+      "source": "./",
       "category": "productivity",
       "keywords": ["planning", "context", "subagents", "breadcrumbs", "sqlite"]
     }
