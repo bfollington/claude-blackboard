@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "claude-blackboard",
-  "description": "Local SQLite blackboard for cross-session context sharing between Claude Code agents",
+  "description": "Local SQLite blackboard for cross-session context sharing and principled development with Claude Code agents",
   "owner": {
     "name": "bfollington",
     "url": "https://github.com/bfollington"
@@ -15,9 +15,51 @@
         "name": "bfollington",
         "url": "https://github.com/bfollington"
       },
-      "source": "./",
+      "source": "./blackboard",
       "category": "productivity",
-      "keywords": ["planning", "context", "subagents", "breadcrumbs", "sqlite"]
+      "keywords": [
+        "planning",
+        "context",
+        "subagents",
+        "breadcrumbs",
+        "sqlite"
+      ]
+    },
+    {
+      "name": "principles",
+      "description": "Document the principles of a codebase and maintain the decisions that lead to them over time.",
+      "version": "0.1.0",
+      "author": {
+        "name": "bfollington",
+        "url": "https://github.com/bfollington"
+      },
+      "source": "./principles",
+      "category": "productivity",
+      "keywords": [
+        "planning",
+        "context",
+        "subagents",
+        "breadcrumbs",
+        "sqlite"
+      ]
+    },
+    {
+      "name": "domain",
+      "description": "Extract and explore the key domain concepts in your system and thoughtfully navigate the changes to them.",
+      "version": "0.1.0",
+      "author": {
+        "name": "bfollington",
+        "url": "https://github.com/bfollington"
+      },
+      "source": "./domain",
+      "category": "productivity",
+      "keywords": [
+        "planning",
+        "context",
+        "subagents",
+        "breadcrumbs",
+        "sqlite"
+      ]
     }
   ]
 }

@@ -1,0 +1,77 @@
+{
+  "SessionStart": [
+    {
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/scripts/session-start.sh"
+        }
+      ]
+    }
+  ],
+  "PreToolUse": [
+    {
+      "matcher": "Edit|Write",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/scripts/type-check.sh"
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "Edit|Write",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/scripts/type-changed.sh"
+        }
+      ]
+    },
+    {
+      "matcher": "ExitPlanMode",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/scripts/decision-checkpoint.sh"
+        }
+      ]
+    }
+  ],
+  "PreCompact": [
+    {
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/scripts/decision-checkpoint.sh"
+        }
+      ]
+    }
+  ],
+  "SessionEnd": [
+    {
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/scripts/decision-checkpoint.sh"
+        }
+      ]
+    }
+  ],
+  "SubagentStop": [
+    {
+      "matcher": ".*",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/scripts/subagent-checkpoint.sh"
+        }
+      ]
+    }
+  ]
+}
