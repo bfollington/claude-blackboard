@@ -33,7 +33,7 @@ Expected format:
 
 Run the bug-report script:
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/bug-report.sh" "<title>" --steps "<steps>" --evidence "<evidence>"
+"$(.claude/cpr.sh blackboard)/scripts/bug-report.sh" "<title>" --steps "<steps>" --evidence "<evidence>"
 ```
 
 Omit --evidence if not provided. Escape quotes properly.

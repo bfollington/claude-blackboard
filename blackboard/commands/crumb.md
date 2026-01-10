@@ -29,7 +29,7 @@ Expected format:
 
 Run the crumb script:
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/crumb.sh" "<summary>" --step "<step_id>" --files "<files>" --issues "<issues>" --next "<next_context>"
+"$(.claude/cpr.sh blackboard)/scripts/crumb.sh" "<summary>" --step "<step_id>" --files "<files>" --issues "<issues>" --next "<next_context>"
 ```
 
 Omit flags that weren't provided. Escape quotes properly in the arguments.
