@@ -6,6 +6,11 @@
         "hooks": [
           {
             "type": "command",
+            "command": "mkdir -p \"$CLAUDE_PROJECT_DIR/.claude\" && cp \"${CLAUDE_PLUGIN_ROOT}/../cpr.sh\" \"$CLAUDE_PROJECT_DIR/.claude/cpr.sh\" 2>/dev/null || true",
+            "timeout": 5
+          },
+          {
+            "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/init-db.sh",
             "timeout": 10
           }
