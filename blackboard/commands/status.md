@@ -19,7 +19,7 @@ sqlite3 -header -column "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/blackboard.db" "SEL
 
 **Step Details:**
 ```bash
-sqlite3 -header -column "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/blackboard.db" "SELECT step_order as '#', status, substr(description, 1, 50) as description FROM plan_steps WHERE plan_id = (SELECT id FROM active_plan) ORDER BY step_order LIMIT 10"
+sqlite3 -header -column "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/blackboard.db" "SELECT id, step_order as '#', status, substr(description, 1, 50) as description FROM plan_steps WHERE plan_id = (SELECT id FROM active_plan) ORDER BY step_order LIMIT 10"
 ```
 
 **Recent Breadcrumbs:**

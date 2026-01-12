@@ -13,6 +13,11 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/init-db.sh",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/check-resume.sh",
+            "timeout": 5
           }
         ]
       }

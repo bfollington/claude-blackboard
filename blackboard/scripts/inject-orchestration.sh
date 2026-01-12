@@ -5,7 +5,6 @@ set -euo pipefail
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
 DB="$PROJECT_DIR/.claude/blackboard.db"
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 INPUT=$(cat)
 
 # Check if this is ExitPlanMode
