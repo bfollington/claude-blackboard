@@ -37,11 +37,11 @@ sqlite3 "$CLAUDE_PROJECT_DIR/.claude/blackboard.db" "SELECT mistake, symptoms, r
 2. **Make atomic, testable changes** - Each change should be verifiable
 3. **If blocked by a real issue**, file a bug report and STOP - Don't speculate on fixes:
    ```bash
-   "$(.claude/cpr.sh blackboard)/scripts/bug-report.sh" "Title of blocker" --steps "1. Do X  2. See Y fail" --evidence "error logs here"
+   "$CLAUDE_PROJECT_DIR/.claude/scripts/bug-report.sh" "Title of blocker" --steps "1. Do X  2. See Y fail" --evidence "error logs here"
    ```
 4. **If you make a mistake and correct it**, record it for future agents:
    ```bash
-   "$(.claude/cpr.sh blackboard)/scripts/oops.sh" "What went wrong" --symptoms "error message" --fix "correct approach" --tags "typescript,imports"
+   "$CLAUDE_PROJECT_DIR/.claude/scripts/oops.sh" "What went wrong" --symptoms "error message" --fix "correct approach" --tags "typescript,imports"
    ```
 
 ## Before Returning
@@ -50,7 +50,7 @@ You MUST record a breadcrumb. This is not optional.
 
 Use the crumb script via Bash:
 ```bash
-"$(.claude/cpr.sh blackboard)/scripts/crumb.sh" "Your summary here" --step <step_id> --files "file1.ts,file2.ts" --issues "any issues" --next "context for next agent"
+"$CLAUDE_PROJECT_DIR/.claude/scripts/crumb.sh" "Your summary here" --step <step_id> --files "file1.ts,file2.ts" --issues "any issues" --next "context for next agent"
 ```
 
 Arguments:
@@ -62,7 +62,7 @@ Arguments:
 
 Example:
 ```bash
-"$(.claude/cpr.sh blackboard)/scripts/crumb.sh" "Implemented user authentication endpoint with JWT validation" --step abc123 --files "src/auth/login.ts,src/auth/types.ts" --issues "Had to work around missing types for jwt library" --next "Token refresh endpoint still needed, see TODO in login.ts"
+"$CLAUDE_PROJECT_DIR/.claude/scripts/crumb.sh" "Implemented user authentication endpoint with JWT validation" --step abc123 --files "src/auth/login.ts,src/auth/types.ts" --issues "Had to work around missing types for jwt library" --next "Token refresh endpoint still needed, see TODO in login.ts"
 ```
 
 ## Failure Modes

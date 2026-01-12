@@ -13,7 +13,10 @@ fi
 
 # Look up in installed plugins registry
 if [[ -f "$REGISTRY" ]] && command -v jq &>/dev/null; then
-  PLUGIN_PATH=$(jq -r --arg name "$PLUGIN_NAME" '.[] | select(.name == $name) | .source' "$REGISTRY" 2>/dev/null)
+  # Keys are "plugin@marketplace", we match any key starting with our plugin name
+  PLUGIN_PATH=$(jq -r --arg name "$PLUGIN_NAME" '
+    .plugins | to_entries[] | select(.key | startswith($name + "@")) | .value[0].installPath
+  ' "$REGISTRY" 2>/dev/null)
   if [[ -n "$PLUGIN_PATH" && "$PLUGIN_PATH" != "null" ]]; then
     echo "$PLUGIN_PATH"
     exit 0

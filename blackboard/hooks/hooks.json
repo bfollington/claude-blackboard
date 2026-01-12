@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "mkdir -p \"$CLAUDE_PROJECT_DIR/.claude\" && cp \"${CLAUDE_PLUGIN_ROOT}/../cpr.sh\" \"$CLAUDE_PROJECT_DIR/.claude/cpr.sh\" 2>/dev/null || true",
+            "command": "mkdir -p \"$CLAUDE_PROJECT_DIR/.claude/scripts\" && cp \"${CLAUDE_PLUGIN_ROOT}/scripts/\"*.sh \"$CLAUDE_PROJECT_DIR/.claude/scripts/\" 2>/dev/null || true",
             "timeout": 5
           },
           {
