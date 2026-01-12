@@ -3,7 +3,8 @@ set -euo pipefail
 
 # SubagentStop - Update step status based on recent breadcrumbs
 
-DB="$CLAUDE_PROJECT_DIR/.claude/blackboard.db"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+DB="$PROJECT_DIR/.claude/blackboard.db"
 
 # Read input (consume it)
 cat > /dev/null

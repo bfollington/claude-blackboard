@@ -3,7 +3,8 @@ set -euo pipefail
 
 # PreCompact - Suggest reflection before compacting
 
-DB="$CLAUDE_PROJECT_DIR/.claude/blackboard.db"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+DB="$PROJECT_DIR/.claude/blackboard.db"
 
 # Read input
 cat > /dev/null

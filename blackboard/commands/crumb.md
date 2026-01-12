@@ -9,10 +9,10 @@ Record what you accomplished as a breadcrumb for the active plan.
 ## Current Context
 
 Active plan:
-!`sqlite3 "$CLAUDE_PROJECT_DIR/.claude/blackboard.db" "SELECT id, description FROM active_plan" 2>/dev/null || echo "No active plan"`
+!`sqlite3 "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/blackboard.db" "SELECT id, description FROM active_plan" 2>/dev/null || echo "No active plan"`
 
 Recent breadcrumbs:
-!`sqlite3 "$CLAUDE_PROJECT_DIR/.claude/blackboard.db" "SELECT created_at, substr(summary, 1, 60) as summary FROM recent_crumbs LIMIT 3" 2>/dev/null || echo "No breadcrumbs yet"`
+!`sqlite3 "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/blackboard.db" "SELECT created_at, substr(summary, 1, 60) as summary FROM recent_crumbs LIMIT 3" 2>/dev/null || echo "No breadcrumbs yet"`
 
 ## Instructions
 
@@ -29,7 +29,7 @@ Expected format:
 
 Run the crumb script:
 ```bash
-"$CLAUDE_PROJECT_DIR/.claude/scripts/crumb.sh" "<summary>" --step "<step_id>" --files "<files>" --issues "<issues>" --next "<next_context>"
+"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/scripts/crumb.sh" "<summary>" --step "<step_id>" --files "<files>" --issues "<issues>" --next "<next_context>"
 ```
 
 Omit flags that weren't provided. Escape quotes properly in the arguments.

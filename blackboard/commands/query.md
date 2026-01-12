@@ -26,7 +26,7 @@ Run a custom SQL query against the blackboard.
 Run the following with the provided arguments:
 
 ```bash
-sqlite3 -header -column "$CLAUDE_PROJECT_DIR/.claude/blackboard.db" "$ARGUMENTS"
+sqlite3 -header -column "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/blackboard.db" "$ARGUMENTS"
 ```
 
 ## Example Queries

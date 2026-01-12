@@ -4,7 +4,8 @@ set -euo pipefail
 # oops.sh - Record a correction/mistake in the blackboard
 # Usage: oops.sh <mistake> [--symptoms <text>] [--fix <text>] [--tags <list>]
 
-DB="$CLAUDE_PROJECT_DIR/.claude/blackboard.db"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+DB="$PROJECT_DIR/.claude/blackboard.db"
 
 # Check database exists
 if [ ! -f "$DB" ]; then

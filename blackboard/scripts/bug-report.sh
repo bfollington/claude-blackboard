@@ -4,7 +4,8 @@ set -euo pipefail
 # bug-report.sh - File a blocking bug report
 # Usage: bug-report.sh <title> --steps <repro steps> [--evidence <logs>]
 
-DB="$CLAUDE_PROJECT_DIR/.claude/blackboard.db"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+DB="$PROJECT_DIR/.claude/blackboard.db"
 
 # Check database exists
 if [ ! -f "$DB" ]; then

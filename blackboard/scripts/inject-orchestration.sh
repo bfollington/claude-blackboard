@@ -3,7 +3,8 @@ set -euo pipefail
 
 # PostToolUse[ExitPlanMode] - Inject orchestration instructions
 
-DB="$CLAUDE_PROJECT_DIR/.claude/blackboard.db"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+DB="$PROJECT_DIR/.claude/blackboard.db"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
 INPUT=$(cat)
 
@@ -38,7 +39,7 @@ The plan "PLAN_DESC_PLACEHOLDER" has been stored in the blackboard. Now execute 
 
 3. **Context continuity**: Before spawning each batch, query recent breadcrumbs:
    ```bash
-   sqlite3 "$CLAUDE_PROJECT_DIR/.claude/blackboard.db" "SELECT summary, issues, next_context FROM breadcrumbs WHERE plan_id='PLAN_ID_PLACEHOLDER' ORDER BY created_at DESC LIMIT 5"
+   sqlite3 "${CLAUDE_PROJECT_DIR:-$PWD}/.claude/blackboard.db" "SELECT summary, issues, next_context FROM breadcrumbs WHERE plan_id='PLAN_ID_PLACEHOLDER' ORDER BY created_at DESC LIMIT 5"
    ```
 
 4. **Step status**: After each subagent completes, the step status updates automatically via the SubagentStop hook.

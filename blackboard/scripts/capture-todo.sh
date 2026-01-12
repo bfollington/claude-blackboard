@@ -3,7 +3,8 @@ set -euo pipefail
 
 # PostToolUse[TodoWrite] - Capture todos as plan_steps
 
-DB="$CLAUDE_PROJECT_DIR/.claude/blackboard.db"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+DB="$PROJECT_DIR/.claude/blackboard.db"
 INPUT=$(cat)
 
 # Check if this is TodoWrite

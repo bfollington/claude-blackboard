@@ -20,7 +20,7 @@ Expected format:
 
 Run the oops script:
 ```bash
-"$CLAUDE_PROJECT_DIR/.claude/scripts/oops.sh" "<mistake>" --symptoms "<symptoms>" --fix "<fix>" --tags "<tags>"
+"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/scripts/oops.sh" "<mistake>" --symptoms "<symptoms>" --fix "<fix>" --tags "<tags>"
 ```
 
 Omit flags that weren't provided. Escape quotes properly.

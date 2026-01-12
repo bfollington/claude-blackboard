@@ -4,7 +4,8 @@ set -euo pipefail
 # crumb.sh - Record a breadcrumb in the blackboard
 # Usage: crumb.sh <summary> [--step <id>] [--files <list>] [--issues <text>] [--next <text>]
 
-DB="$CLAUDE_PROJECT_DIR/.claude/blackboard.db"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$PWD}"
+DB="$PROJECT_DIR/.claude/blackboard.db"
 
 # Check database exists
 if [ ! -f "$DB" ]; then
