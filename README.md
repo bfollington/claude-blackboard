@@ -55,7 +55,7 @@ After installing the plugin, you need to install the `blackboard` CLI command:
 
 ```bash
 # Navigate to the plugin directory (usually in ~/.claude/plugins/)
-cd ~/.claude/plugins/bfollington-claude-blackboard/blackboard-cli
+cd ~/.claude/plugins/bfollington-claude-blackboard/blackboard/cli
 
 # Install the CLI globally
 deno task install
@@ -123,18 +123,17 @@ blackboard/
 ├── schema.sql
 └── README.md
 
-blackboard-cli/               # Deno-based CLI (replaces bash scripts)
-├── deno.json
-├── mod.ts                    # Entry point
-├── src/
-│   ├── cli.ts               # Command tree
-│   ├── commands/            # Interactive commands
-│   ├── hooks/               # Hook handlers
-│   ├── db/                  # Database layer
-│   ├── output/              # Output formatting
-│   ├── types/               # TypeScript types
-│   └── utils/               # Utilities
-└── README.md
+├── cli/                      # Deno-based CLI (replaces bash scripts)
+│   ├── deno.json
+│   ├── mod.ts               # Entry point
+│   └── src/
+│       ├── cli.ts           # Command tree
+│       ├── commands/        # Interactive commands
+│       ├── hooks/           # Hook handlers
+│       ├── db/              # Database layer
+│       ├── output/          # Output formatting
+│       ├── types/           # TypeScript types
+│       └── utils/           # Utilities
 ```
 
 ## Database Schema
@@ -169,7 +168,7 @@ If you see errors about the `blackboard` command not being found:
 2. Add `~/.deno/bin` to your PATH
 3. Install the CLI:
    ```bash
-   cd ~/.claude/plugins/bfollington-claude-blackboard/blackboard-cli
+   cd ~/.claude/plugins/bfollington-claude-blackboard/blackboard/cli
    deno task install
    ```
 4. Verify installation: `blackboard --version`
@@ -200,7 +199,7 @@ blackboard hook init-db
 The CLI is written in TypeScript using Deno. To work on it:
 
 ```bash
-cd blackboard-cli
+cd blackboard/cli
 
 # Run in development mode with watch
 deno task dev status

@@ -27,7 +27,7 @@ The blackboard CLI replaces the original bash scripts with a single, unified Typ
 
 ### Install the CLI
 
-From the blackboard-cli directory:
+From the cli directory:
 
 ```bash
 # Install globally to ~/.deno/bin
@@ -186,7 +186,7 @@ deno task install
 ### Project Structure
 
 ```
-blackboard-cli/
+cli/
 ├── deno.json            # Deno configuration, dependencies, tasks
 ├── mod.ts               # Entry point
 ├── src/
