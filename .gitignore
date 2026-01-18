@@ -1,4 +1,4 @@
 .DS_Store
 
-# Claude Code blackboard
-.claude/blackboard.db
+# Claude Code blackboard (project-local data)
+.claude/

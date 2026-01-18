@@ -6,17 +6,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "mkdir -p \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/scripts\" && cp \"${CLAUDE_PLUGIN_ROOT}/scripts/\"*.sh \"${CLAUDE_PROJECT_DIR:-$PWD}/.claude/scripts/\" 2>/dev/null || true",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/check-cli.sh",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/init-db.sh",
+            "command": "blackboard hook init-db",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/check-resume.sh",
+            "command": "blackboard hook check-resume",
             "timeout": 5
           }
         ]
@@ -28,7 +28,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/store-plan.sh",
+            "command": "blackboard hook store-plan",
             "timeout": 10
           }
         ]
@@ -40,7 +40,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/inject-orchestration.sh",
+            "command": "blackboard hook inject-orchestration",
             "timeout": 10
           }
         ]
@@ -50,7 +50,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/capture-todo.sh",
+            "command": "blackboard hook capture-todo",
             "timeout": 10
           }
         ]
@@ -61,7 +61,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/update-step-status.sh",
+            "command": "blackboard hook update-step-status",
             "timeout": 10
           }
         ]
@@ -72,7 +72,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/prompt-reflect.sh",
+            "command": "blackboard hook prompt-reflect",
             "timeout": 5
           }
         ]

@@ -28,10 +28,10 @@ import type {
  */
 export function getActivePlan(): Plan | null {
   const db = getDb();
-  const stmt = db.prepare<Plan[]>(
+  const stmt = db.prepare(
     "SELECT * FROM active_plan"
   );
-  const results = stmt.all();
+  const results = stmt.all() as Plan[];
   return results.length > 0 ? results[0] : null;
 }
 
@@ -83,12 +83,12 @@ export function updatePlanStatus(id: string, status: PlanStatus): void {
  */
 export function getStepsForPlan(planId: string): PlanStep[] {
   const db = getDb();
-  const stmt = db.prepare<PlanStep[]>(`
+  const stmt = db.prepare(`
     SELECT * FROM plan_steps
     WHERE plan_id = :planId
     ORDER BY step_order
   `);
-  return stmt.all({ planId });
+  return stmt.all({ planId }) as PlanStep[];
 }
 
 /**
@@ -99,12 +99,12 @@ export function getStepsForPlan(planId: string): PlanStep[] {
  */
 export function getPendingSteps(planId: string): PlanStep[] {
   const db = getDb();
-  const stmt = db.prepare<PlanStep[]>(`
+  const stmt = db.prepare(`
     SELECT * FROM plan_steps
     WHERE plan_id = :planId AND status = 'pending'
     ORDER BY step_order
   `);
-  return stmt.all({ planId });
+  return stmt.all({ planId }) as PlanStep[];
 }
 
 /**
@@ -216,13 +216,13 @@ export function getRecentBreadcrumbs(
   limit = 10
 ): Breadcrumb[] {
   const db = getDb();
-  const stmt = db.prepare<Breadcrumb[]>(`
+  const stmt = db.prepare(`
     SELECT * FROM breadcrumbs
     WHERE plan_id = :planId
     ORDER BY created_at DESC
     LIMIT :limit
   `);
-  return stmt.all({ planId, limit });
+  return stmt.all({ planId, limit }) as Breadcrumb[];
 }
 
 // ============================================================================
@@ -295,13 +295,13 @@ export function insertBugReport(
  */
 export function getOpenBugReports(limit = 10): BugReport[] {
   const db = getDb();
-  const stmt = db.prepare<BugReport[]>(`
+  const stmt = db.prepare(`
     SELECT * FROM bug_reports
     WHERE status = 'open'
     ORDER BY created_at DESC
     LIMIT :limit
   `);
-  return stmt.all({ limit });
+  return stmt.all({ limit }) as BugReport[];
 }
 
 // ============================================================================

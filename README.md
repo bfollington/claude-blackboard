@@ -39,15 +39,37 @@ git clone https://github.com/bfollington/claude-blackboard.git
 
 ### Prerequisites
 
-- `sqlite3` CLI (usually pre-installed)
-- `jq` for JSON parsing in hooks
-- `openssl` for ID generation (usually pre-installed)
+- **Deno 2.x** (required for the blackboard CLI)
+  ```bash
+  # Install Deno if not already installed
+  curl -fsSL https://deno.land/install.sh | sh
+  ```
+- Ensure `~/.deno/bin` is in your PATH:
+  ```bash
+  export PATH="$HOME/.deno/bin:$PATH"
+  ```
+
+### CLI Installation
+
+After installing the plugin, you need to install the `blackboard` CLI command:
+
+```bash
+# Navigate to the plugin directory (usually in ~/.claude/plugins/)
+cd ~/.claude/plugins/bfollington-claude-blackboard/blackboard-cli
+
+# Install the CLI globally
+deno task install
+```
+
+This installs the `blackboard` command to `~/.deno/bin`, making it available globally with a single `Bash(blackboard:*)` permission in Claude Code.
 
 ## How It Works
 
 ### Automatic Initialization
 
 The plugin automatically creates `.claude/blackboard.db` in your project on session start. The database is project-specific and should be gitignored.
+
+The blackboard CLI provides all functionality through a unified command with subcommands for both interactive use and hook handlers.
 
 ### Workflow
 
@@ -96,17 +118,22 @@ blackboard/
 │   └── implementer.md       # Subagent for staged execution
 ├── hooks/
 │   └── hooks.json           # Hook configuration
-├── scripts/                  # Shell scripts for hooks and subagents
-│   ├── init-db.sh
-│   ├── store-plan.sh
-│   ├── inject-orchestration.sh
-│   ├── capture-todo.sh
-│   ├── update-step-status.sh
-│   ├── prompt-reflect.sh
-│   ├── crumb.sh
-│   ├── oops.sh
-│   └── bug-report.sh
+├── scripts/
+│   └── check-cli.sh         # CLI installation check
 ├── schema.sql
+└── README.md
+
+blackboard-cli/               # Deno-based CLI (replaces bash scripts)
+├── deno.json
+├── mod.ts                    # Entry point
+├── src/
+│   ├── cli.ts               # Command tree
+│   ├── commands/            # Interactive commands
+│   ├── hooks/               # Hook handlers
+│   ├── db/                  # Database layer
+│   ├── output/              # Output formatting
+│   ├── types/               # TypeScript types
+│   └── utils/               # Utilities
 └── README.md
 ```
 
@@ -133,35 +160,66 @@ blackboard/
 
 1. Check it's installed: `/plugin`
 2. Run Claude Code with `--debug` to see loading details
-3. Ensure scripts are executable
+
+### CLI not installed
+
+If you see errors about the `blackboard` command not being found:
+
+1. Install Deno 2.x: `curl -fsSL https://deno.land/install.sh | sh`
+2. Add `~/.deno/bin` to your PATH
+3. Install the CLI:
+   ```bash
+   cd ~/.claude/plugins/bfollington-claude-blackboard/blackboard-cli
+   deno task install
+   ```
+4. Verify installation: `blackboard --version`
 
 ### Database not created
 
-The database is created automatically on session start. If missing:
+The database is created automatically on session start. To manually initialize:
 ```bash
-sqlite3 .claude/blackboard.db < path/to/plugin/schema.sql
+blackboard hook init-db
 ```
 
 ### Hooks not firing
 
 1. Verify hooks in `/hooks`
 2. Run with `--debug` to see hook execution
-3. Check scripts are executable: `chmod +x scripts/*.sh`
-
-### Missing dependencies
-
-```bash
-# macOS
-brew install jq sqlite3
-
-# Ubuntu/Debian
-apt install jq sqlite3
-```
+3. Ensure the `blackboard` CLI is installed and in PATH
 
 ## Development
 
-To modify the plugin:
+### Modifying the Plugin
 
-1. Make changes to files
+1. Make changes to files in `blackboard/` directory
 2. Uninstall: `/plugin uninstall blackboard@marketplace-name`
 3. Reinstall: `/plugin install blackboard@marketplace-name`
+
+### Developing the CLI
+
+The CLI is written in TypeScript using Deno. To work on it:
+
+```bash
+cd blackboard-cli
+
+# Run in development mode with watch
+deno task dev status
+
+# Install your local changes globally
+deno task install
+
+# Run tests (if available)
+deno test
+
+# Format code
+deno fmt
+
+# Lint code
+deno lint
+```
+
+The CLI uses:
+- **@cliffy/command** for the command-line interface
+- **@db/sqlite** for native SQLite access via FFI
+- Prepared statements to prevent SQL injection
+- TypeScript for type safety
