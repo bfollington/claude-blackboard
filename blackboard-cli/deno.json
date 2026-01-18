@@ -1,0 +1,13 @@
+{
+  "name": "@blackboard/cli",
+  "version": "0.3.0",
+  "exports": "./mod.ts",
+  "tasks": {
+    "dev": "deno run --watch --allow-read --allow-write --allow-env --allow-ffi mod.ts",
+    "install": "deno install -g --name blackboard --allow-read --allow-write --allow-env --allow-ffi mod.ts"
+  },
+  "imports": {
+    "@cliffy/command": "jsr:@cliffy/command@^1.0.0-rc.7",
+    "@db/sqlite": "jsr:@db/sqlite@^0.12"
+  }
+}
