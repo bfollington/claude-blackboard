@@ -13,6 +13,7 @@ import {
   captureTodo,
   updateStepStatusHook,
   promptReflect,
+  loadThread,
 } from "./hooks/mod.ts";
 import {
   statusCommand,
@@ -22,7 +23,52 @@ import {
   bugReportCommand,
   reflectCommand,
   installCommand,
+  threadNewCommand,
+  threadListCommand,
+  threadStatusCommand,
+  threadWorkCommand,
 } from "./commands/mod.ts";
+
+/**
+ * Thread subcommand group - manage work threads.
+ */
+const threadCommand = new Command()
+  .description("Manage work threads")
+  .action(() => {
+    console.log("Thread subcommand - use one of the available commands:");
+    console.log("  new <name>      Create a new thread");
+    console.log("  list            List all threads");
+    console.log("  status [name]   Show thread status");
+    console.log("  work <name>     Launch Claude with thread context");
+  })
+  .command("new", "Create a new thread")
+  .arguments("<name:string>")
+  .action(async (_options: void, name: string) => {
+    await threadNewCommand(name, {});
+  })
+  .reset()
+  .command("list", "List all threads")
+  .option("--status <status:string>", "Filter by status (active|paused|completed|archived)")
+  .action(async (options: { status?: string }) => {
+    // Cast status to ThreadStatus if provided
+    const listOptions = {
+      status: options.status as "active" | "paused" | "completed" | "archived" | undefined,
+    };
+    await threadListCommand(listOptions);
+  })
+  .reset()
+  .command("status", "Show thread status")
+  .arguments("[name:string]")
+  .option("-b, --brief", "Brief output (no plan markdown)")
+  .action(async (options: { brief?: boolean }, name?: string) => {
+    await threadStatusCommand(name, options);
+  })
+  .reset()
+  .command("work", "Launch Claude with thread context")
+  .arguments("<name:string>")
+  .action(async (_options: void, name: string) => {
+    await threadWorkCommand(name, {});
+  });
 
 /**
  * Hook subcommand group - all hook handlers for Claude Code plugin integration.
@@ -38,6 +84,7 @@ const hookCommand = new Command()
     console.log("  capture-todo         Sync TodoWrite to steps");
     console.log("  update-step-status   Mark step complete");
     console.log("  prompt-reflect       Suggest reflection");
+    console.log("  load-thread          Load thread context packet");
   })
   .command("init-db", "Initialize database (SessionStart)")
   .action(async () => {
@@ -75,6 +122,12 @@ const hookCommand = new Command()
   .command("prompt-reflect", "Suggest reflection (PreCompact)")
   .action(async () => {
     await promptReflect();
+  })
+  .reset()
+  .command("load-thread", "Load thread context packet")
+  .arguments("[name:string]")
+  .action(async (_options, name) => {
+    await loadThread(name);
   });
 
 /**
@@ -148,6 +201,10 @@ export const cli = new Command()
   .action(async (options, content) => {
     await reflectCommand(content, options);
   })
+  .reset()
+
+  // Thread subcommand group
+  .command("thread", threadCommand)
   .reset()
 
   // Hook subcommand group

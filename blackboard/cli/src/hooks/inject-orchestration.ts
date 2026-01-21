@@ -1,10 +1,10 @@
 /**
  * PostToolUse[ExitPlanMode] hook - Inject orchestration instructions.
- * Matches behavior of blackboard/scripts/inject-orchestration.sh
+ * Thread-aware version that references the current thread.
  */
 
 import { readStdin } from "../utils/stdin.ts";
-import { getActivePlan } from "../db/queries.ts";
+import { getActivePlan, getCurrentThread } from "../db/queries.ts";
 
 interface PostToolUseInput {
   tool_name?: string;
@@ -15,8 +15,8 @@ interface PostToolUseInput {
  * Inject orchestration hook handler.
  * - Reads JSON from stdin (PostToolUseInput)
  * - Verifies tool_name === "ExitPlanMode", exits if not
- * - Gets the active plan that was just stored
- * - Outputs orchestration instructions as additionalContext
+ * - Gets the active plan and current thread
+ * - Outputs thread-aware orchestration instructions
  */
 export async function injectOrchestration(): Promise<void> {
   const input = await readStdin<PostToolUseInput>();
@@ -26,35 +26,59 @@ export async function injectOrchestration(): Promise<void> {
     Deno.exit(0);
   }
 
-  // Get active plan
+  // Get active plan and current thread
   const plan = getActivePlan();
   if (!plan) {
     Deno.exit(0);
   }
 
-  // Build orchestration prompt (matches the template from bash script)
+  const thread = getCurrentThread();
+  const threadInfo = thread
+    ? `Thread: **${thread.name}** | `
+    : "";
+
+  // Build thread-aware orchestration prompt
   const prompt = `## Plan Stored: ${plan.id}
 
-The plan "${plan.description}" has been stored in the blackboard. Now execute it:
+${threadInfo}Plan: "${plan.description}"
 
-1. **Create steps**: Use TodoWrite to break this plan into discrete, ordered steps. Each todo item becomes a plan_step in the database.
+The plan has been stored and associated with ${thread ? `thread "${thread.name}"` : "an auto-created thread"}. Now execute it:
 
-2. **Staged execution**: Implement steps using subagents. For each batch of parallelizable steps:
-   - Spawn Task tools with the implementer subagent
-   - Pass explicitly in the prompt: plan_id="${plan.id}" and the step_id(s) being worked on
-   - Subagents will record breadcrumbs using \`blackboard crumb\`
-   - ALWAYS use a subagent, even for trivial, serial changes to conserve the root context window
+### 1. Create Steps
+Use TodoWrite to break this plan into discrete, ordered steps. Each todo becomes a tracked plan_step.
 
-3. **Context continuity**: Before spawning each batch, query recent breadcrumbs:
-   \`\`\`bash
-   blackboard query "SELECT summary, issues, next_context FROM breadcrumbs WHERE plan_id='${plan.id}' ORDER BY created_at DESC LIMIT 5"
-   \`\`\`
+### 2. Staged Execution
+Implement steps using the \`blackboard:implementer\` subagent:
 
-4. **Step status**: After each subagent completes, the step status updates automatically via the SubagentStop hook.
+\`\`\`
+Task tool with subagent_type: "blackboard:implementer"
+Prompt: "Implement step X: <description>. Plan ID: ${plan.id}"
+\`\`\`
 
-5. **Completion**: When all steps are done, run /reflect to capture lessons learned.
+- Subagents record breadcrumbs automatically via \`blackboard crumb\`
+- ALWAYS use subagents to conserve root context window
+- Parallelize independent steps when possible
 
-Begin by creating the steps with TodoWrite.`;
+### 3. Context Continuity
+Before each batch, check recent progress:
+\`\`\`bash
+blackboard query "SELECT summary, issues FROM breadcrumbs WHERE plan_id='${plan.id}' ORDER BY created_at DESC LIMIT 5"
+\`\`\`
+
+### 4. Progress Tracking
+- Step status updates automatically when subagents complete
+- Use \`/crumb <summary>\` for manual progress notes
+- Use \`/oops <mistake>\` if you make a correctable error
+- Use \`/bug-report <title> --steps <repro>\` if blocked
+
+### 5. Completion
+When all steps are done:
+1. Run \`/reflect\` to capture lessons learned
+2. The thread remains available for future sessions
+
+${thread ? `To reload this thread later: \`/blackboard:thread ${thread.name}\`` : ""}
+
+**Begin by creating the steps with TodoWrite.**`;
 
   // Output JSON with additionalContext
   console.log(

@@ -2,3 +2,6 @@
 
 # Claude Code blackboard (project-local data)
 .claude/
+
+# Claude Code blackboard
+.claude/blackboard.db

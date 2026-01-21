@@ -1,9 +1,10 @@
 /**
  * Crumb command - Record a breadcrumb for the current plan.
+ * Thread-aware: prefers current thread's plan over active plan.
  */
 
 import { getDb } from "../db/connection.ts";
-import { getActivePlan } from "../db/queries.ts";
+import { getActivePlan, getCurrentThread } from "../db/queries.ts";
 
 interface CrumbOptions {
   db?: string;
@@ -13,6 +14,21 @@ interface CrumbOptions {
   issues?: string;
   next?: string;
   agent?: string;
+}
+
+/**
+ * Gets the plan ID to use, preferring current thread's plan.
+ */
+function getTargetPlanId(): string | null {
+  // First try current thread's plan
+  const thread = getCurrentThread();
+  if (thread?.current_plan_id) {
+    return thread.current_plan_id;
+  }
+
+  // Fall back to active plan
+  const activePlan = getActivePlan();
+  return activePlan?.id ?? null;
 }
 
 /**
@@ -27,10 +43,10 @@ export async function crumbCommand(
 ): Promise<void> {
   const db = getDb(options.db);
 
-  // Get active plan
-  const activePlan = getActivePlan();
-  if (!activePlan) {
-    console.error("Error: No active plan found. Cannot record breadcrumb.");
+  // Get target plan (prefer current thread's plan)
+  const planId = getTargetPlanId();
+  if (!planId) {
+    console.error("Error: No active plan or thread found. Cannot record breadcrumb.");
     Deno.exit(1);
   }
 
@@ -51,7 +67,7 @@ export async function crumbCommand(
 
   stmt.run({
     id: crumbId,
-    plan_id: activePlan.id,
+    plan_id: planId,
     step_id: options.step ?? null,
     agent_type: options.agent ?? "implementer",
     summary: summary,

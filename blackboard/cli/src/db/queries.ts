@@ -11,10 +11,168 @@ import type {
   Correction,
   BugReport,
   Reflection,
+  Thread,
   PlanStatus,
   StepStatus,
   BugReportStatus,
+  ThreadStatus,
 } from "../types/schema.ts";
+
+// ============================================================================
+// Threads
+// ============================================================================
+
+/**
+ * Gets the current thread (most recently updated, status = 'active').
+ *
+ * @returns Current thread or null if none exists
+ */
+export function getCurrentThread(): Thread | null {
+  const db = getDb();
+  const stmt = db.prepare("SELECT * FROM current_thread");
+  const results = stmt.all() as Thread[];
+  return results.length > 0 ? results[0] : null;
+}
+
+/**
+ * Gets a thread by its name.
+ *
+ * @param name - Thread name (kebab-case)
+ * @returns Thread or null if not found
+ */
+export function getThreadByName(name: string): Thread | null {
+  const db = getDb();
+  const stmt = db.prepare("SELECT * FROM threads WHERE name = :name");
+  const results = stmt.all({ name }) as Thread[];
+  return results.length > 0 ? results[0] : null;
+}
+
+/**
+ * Gets a thread by its ID.
+ *
+ * @param id - Thread ID
+ * @returns Thread or null if not found
+ */
+export function getThreadById(id: string): Thread | null {
+  const db = getDb();
+  const stmt = db.prepare("SELECT * FROM threads WHERE id = :id");
+  const results = stmt.all({ id }) as Thread[];
+  return results.length > 0 ? results[0] : null;
+}
+
+/**
+ * Inserts a new thread into the database.
+ *
+ * @param thread - Thread object to insert (without timestamps)
+ */
+export function insertThread(
+  thread: Omit<Thread, "created_at" | "updated_at">
+): void {
+  const db = getDb();
+  const stmt = db.prepare(`
+    INSERT INTO threads (id, name, current_plan_id, git_branches, status)
+    VALUES (:id, :name, :current_plan_id, :git_branches, :status)
+  `);
+  stmt.run({
+    id: thread.id,
+    name: thread.name,
+    current_plan_id: thread.current_plan_id ?? null,
+    git_branches: thread.git_branches ?? null,
+    status: thread.status,
+  });
+}
+
+/**
+ * Updates a thread's mutable fields.
+ *
+ * @param id - Thread ID
+ * @param updates - Fields to update
+ */
+export function updateThread(
+  id: string,
+  updates: Partial<Pick<Thread, "current_plan_id" | "git_branches" | "status">>
+): void {
+  const db = getDb();
+  const setClauses: string[] = ["updated_at = datetime('now')"];
+  const params: Record<string, string | null> = { id };
+
+  if (updates.current_plan_id !== undefined) {
+    setClauses.push("current_plan_id = :current_plan_id");
+    params.current_plan_id = updates.current_plan_id;
+  }
+  if (updates.git_branches !== undefined) {
+    setClauses.push("git_branches = :git_branches");
+    params.git_branches = updates.git_branches;
+  }
+  if (updates.status !== undefined) {
+    setClauses.push("status = :status");
+    params.status = updates.status;
+  }
+
+  const stmt = db.prepare(`
+    UPDATE threads
+    SET ${setClauses.join(", ")}
+    WHERE id = :id
+  `);
+  stmt.run(params as Record<string, string | null>);
+}
+
+/**
+ * Touches a thread (updates updated_at to now).
+ *
+ * @param id - Thread ID
+ */
+export function touchThread(id: string): void {
+  const db = getDb();
+  const stmt = db.prepare(`
+    UPDATE threads
+    SET updated_at = datetime('now')
+    WHERE id = :id
+  `);
+  stmt.run({ id });
+}
+
+/**
+ * Lists threads with optional status filter.
+ *
+ * @param status - Optional status filter
+ * @param limit - Maximum number of threads to return (default: 20)
+ * @returns Array of threads ordered by updated_at DESC
+ */
+export function listThreads(status?: ThreadStatus, limit = 20): Thread[] {
+  const db = getDb();
+  if (status) {
+    const stmt = db.prepare(`
+      SELECT * FROM threads
+      WHERE status = :status
+      ORDER BY updated_at DESC
+      LIMIT :limit
+    `);
+    return stmt.all({ status, limit }) as Thread[];
+  } else {
+    const stmt = db.prepare(`
+      SELECT * FROM threads
+      ORDER BY updated_at DESC
+      LIMIT :limit
+    `);
+    return stmt.all({ limit }) as Thread[];
+  }
+}
+
+/**
+ * Gets a thread by name or ID.
+ *
+ * @param nameOrId - Thread name or ID
+ * @returns Thread or null if not found
+ */
+export function resolveThread(nameOrId: string): Thread | null {
+  // Try by name first (more common usage)
+  const byName = getThreadByName(nameOrId);
+  if (byName) return byName;
+
+  // Fall back to ID
+  return getThreadById(nameOrId);
+}
 
 // ============================================================================
 // Plans
@@ -43,8 +201,8 @@ export function getActivePlan(): Plan | null {
 export function insertPlan(plan: Omit<Plan, "created_at">): void {
   const db = getDb();
   const stmt = db.prepare(`
-    INSERT INTO plans (id, status, description, plan_markdown, session_id)
-    VALUES (:id, :status, :description, :plan_markdown, :session_id)
+    INSERT INTO plans (id, status, description, plan_markdown, session_id, thread_id)
+    VALUES (:id, :status, :description, :plan_markdown, :session_id, :thread_id)
   `);
   stmt.run({
     id: plan.id,
@@ -52,6 +210,7 @@ export function insertPlan(plan: Omit<Plan, "created_at">): void {
     description: plan.description ?? null,
     plan_markdown: plan.plan_markdown,
     session_id: plan.session_id ?? null,
+    thread_id: plan.thread_id ?? null,
   });
 }
 

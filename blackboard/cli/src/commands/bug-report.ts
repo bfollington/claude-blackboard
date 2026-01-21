@@ -1,15 +1,31 @@
 /**
  * Bug report command - File a blocking bug report with reproduction steps.
+ * Thread-aware: prefers current thread's plan over active plan.
  */
 
 import { getDb } from "../db/connection.ts";
-import { getActivePlan } from "../db/queries.ts";
+import { getActivePlan, getCurrentThread } from "../db/queries.ts";
 
 interface BugReportOptions {
   db?: string;
   quiet?: boolean;
   steps?: string;
   evidence?: string;
+}
+
+/**
+ * Gets the plan ID to use, preferring current thread's plan.
+ */
+function getTargetPlanId(): string | null {
+  // First try current thread's plan
+  const thread = getCurrentThread();
+  if (thread?.current_plan_id) {
+    return thread.current_plan_id;
+  }
+
+  // Fall back to active plan
+  const activePlan = getActivePlan();
+  return activePlan?.id ?? null;
 }
 
 /**
@@ -31,9 +47,8 @@ export async function bugReportCommand(
     Deno.exit(1);
   }
 
-  // Get active plan (optional - bug reports can exist without a plan)
-  const activePlan = getActivePlan();
-  const planId = activePlan?.id ?? null;
+  // Get target plan (optional - bug reports can exist without a plan)
+  const planId = getTargetPlanId();
 
   // Generate ID
   const bugId = crypto.randomUUID().replace(/-/g, "").substring(0, 8);
