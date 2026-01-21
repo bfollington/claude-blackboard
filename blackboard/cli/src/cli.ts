@@ -21,6 +21,7 @@ import {
   oopsCommand,
   bugReportCommand,
   reflectCommand,
+  installCommand,
 } from "./commands/mod.ts";
 
 /**
@@ -82,7 +83,7 @@ const hookCommand = new Command()
  */
 export const cli = new Command()
   .name("blackboard")
-  .version("0.3.0")
+  .version("0.3.2")
   .description("SQLite blackboard for Claude Code context sharing")
   .globalOption("-d, --db <path:string>", "Database path", {
     default: resolveDbPath(),
@@ -94,6 +95,12 @@ export const cli = new Command()
   .command("status", "Show current blackboard status")
   .action(async (options) => {
     await statusCommand(options);
+  })
+  .reset()
+
+  .command("install", "Show installation and update instructions")
+  .action((options) => {
+    installCommand(options);
   })
   .reset()
 
