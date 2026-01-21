@@ -7,6 +7,17 @@ export type PlanStatus = 'accepted' | 'in_progress' | 'completed' | 'abandoned';
 export type StepStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
 export type ReflectionTrigger = 'manual' | 'compact' | 'completion' | 'stop';
 export type BugReportStatus = 'open' | 'resolved' | 'wontfix';
+export type ThreadStatus = 'active' | 'paused' | 'completed' | 'archived';
+
+export interface Thread {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+  current_plan_id: string | null;
+  git_branches: string | null;
+  status: ThreadStatus;
+}
 
 export interface Plan {
   id: string;
@@ -15,6 +26,7 @@ export interface Plan {
   description: string | null;
   plan_markdown: string;
   session_id: string | null;
+  thread_id: string | null;
 }
 
 export interface PlanStep {

@@ -10,3 +10,4 @@ export { injectOrchestration } from "./inject-orchestration.ts";
 export { captureTodo } from "./capture-todo.ts";
 export { updateStepStatusHook } from "./update-step-status.ts";
 export { promptReflect } from "./prompt-reflect.ts";
+export { loadThread } from "./load-thread.ts";

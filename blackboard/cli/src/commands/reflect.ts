@@ -1,14 +1,30 @@
 /**
  * Reflect command - Capture a reflection on the current session or plan.
+ * Thread-aware: prefers current thread's plan over active plan.
  */
 
 import { getDb } from "../db/connection.ts";
-import { getActivePlan } from "../db/queries.ts";
+import { getActivePlan, getCurrentThread } from "../db/queries.ts";
 
 interface ReflectOptions {
   db?: string;
   quiet?: boolean;
   trigger?: string;
+}
+
+/**
+ * Gets the plan ID to use, preferring current thread's plan.
+ */
+function getTargetPlanId(): string | null {
+  // First try current thread's plan
+  const thread = getCurrentThread();
+  if (thread?.current_plan_id) {
+    return thread.current_plan_id;
+  }
+
+  // Fall back to active plan
+  const activePlan = getActivePlan();
+  return activePlan?.id ?? null;
 }
 
 /**
@@ -23,9 +39,8 @@ export async function reflectCommand(
 ): Promise<void> {
   const db = getDb(options.db);
 
-  // Get active plan (optional - reflections can exist without a plan)
-  const activePlan = getActivePlan();
-  const planId = activePlan?.id ?? null;
+  // Get target plan (optional - reflections can exist without a plan)
+  const planId = getTargetPlanId();
 
   // If no content provided, prompt for it
   let reflectionContent = content;

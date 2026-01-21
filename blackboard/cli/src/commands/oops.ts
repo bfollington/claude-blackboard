@@ -1,9 +1,10 @@
 /**
  * Oops command - Record a correction or mistake for future reference.
+ * Thread-aware: prefers current thread's plan over active plan.
  */
 
 import { getDb } from "../db/connection.ts";
-import { getActivePlan } from "../db/queries.ts";
+import { getActivePlan, getCurrentThread } from "../db/queries.ts";
 
 interface OopsOptions {
   db?: string;
@@ -11,6 +12,21 @@ interface OopsOptions {
   symptoms?: string;
   fix?: string;
   tags?: string;
+}
+
+/**
+ * Gets the plan ID to use, preferring current thread's plan.
+ */
+function getTargetPlanId(): string | null {
+  // First try current thread's plan
+  const thread = getCurrentThread();
+  if (thread?.current_plan_id) {
+    return thread.current_plan_id;
+  }
+
+  // Fall back to active plan
+  const activePlan = getActivePlan();
+  return activePlan?.id ?? null;
 }
 
 /**
@@ -25,9 +41,8 @@ export async function oopsCommand(
 ): Promise<void> {
   const db = getDb(options.db);
 
-  // Get active plan (optional - corrections can exist without a plan)
-  const activePlan = getActivePlan();
-  const planId = activePlan?.id ?? null;
+  // Get target plan (optional - corrections can exist without a plan)
+  const planId = getTargetPlanId();
 
   // Generate ID
   const corrId = crypto.randomUUID().replace(/-/g, "").substring(0, 8);
