@@ -6,6 +6,7 @@
 
 import { Database } from "@db/sqlite";
 import { dirname, fromFileUrl, join } from "jsr:@std/path";
+import { existsSync } from "jsr:@std/fs";
 
 let dbInstance: Database | null = null;
 
@@ -23,12 +24,39 @@ function resolveSchemaPath(): string {
 }
 
 /**
- * Resolves the database path based on CLAUDE_PROJECT_DIR or current working directory.
+ * Finds the project root by searching up for a .claude directory.
+ * @returns The directory containing .claude, or null if not found
+ */
+function findProjectRoot(startDir: string): string | null {
+  let current = startDir;
+  while (current !== "/") {
+    if (existsSync(join(current, ".claude"))) {
+      return current;
+    }
+    current = dirname(current);
+  }
+  return null;
+}
+
+/**
+ * Resolves the database path based on CLAUDE_PROJECT_DIR or by searching up for .claude directory.
  * @returns Absolute path to the blackboard database
+ * @throws Error if no .claude directory is found in the hierarchy
  */
 export function resolveDbPath(): string {
-  const projectDir = Deno.env.get("CLAUDE_PROJECT_DIR") ?? Deno.cwd();
-  return `${projectDir}/.claude/blackboard.db`;
+  const envDir = Deno.env.get("CLAUDE_PROJECT_DIR");
+  if (envDir) {
+    return `${envDir}/.claude/blackboard.db`;
+  }
+
+  const projectRoot = findProjectRoot(Deno.cwd());
+  if (!projectRoot) {
+    throw new Error(
+      "No .claude directory found in current directory or any parent. " +
+      "Run this command from within a Claude project, or set CLAUDE_PROJECT_DIR."
+    );
+  }
+  return `${projectRoot}/.claude/blackboard.db`;
 }
 
 /**
