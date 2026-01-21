@@ -16,7 +16,7 @@ if ! command -v blackboard &> /dev/null; then
   PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(dirname "$0")/..}"
   cat <<EOF
 {
-  "systemMessage": "## Blackboard CLI Not Found\n\nThe blackboard plugin requires the \`blackboard\` CLI. Install it:\n\n\`\`\`bash\ndeno install -g --name blackboard --config ${PLUGIN_ROOT}/cli/deno.json --allow-read --allow-write --allow-env --allow-ffi ${PLUGIN_ROOT}/cli/mod.ts\n\`\`\`\n\nEnsure ~/.deno/bin is in your PATH, then restart your session."
+  "systemMessage": "## Blackboard CLI Not Found\n\nThe blackboard plugin requires the \`blackboard\` CLI. Install it:\n\n\`\`\`bash\ndeno install -g --name blackboard --config ${PLUGIN_ROOT}/cli/deno.json --allow-read --allow-write --allow-env --allow-ffi --allow-net=github.com,objects.githubusercontent.com ${PLUGIN_ROOT}/cli/mod.ts\n\`\`\`\n\nEnsure ~/.deno/bin is in your PATH, then restart your session."
 }
 EOF
   exit 0

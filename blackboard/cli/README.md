@@ -245,6 +245,7 @@ The CLI requires these Deno permissions:
 - `--allow-write` - Write to database
 - `--allow-env` - Access `CLAUDE_PROJECT_DIR` and other environment variables
 - `--allow-ffi` - SQLite native bindings via FFI
+- `--allow-net=github.com,objects.githubusercontent.com` - Download SQLite native library on first run
 
 These are bundled into the single `Bash(blackboard:*)` permission in Claude Code.
 
