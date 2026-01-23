@@ -76,24 +76,32 @@ export async function checkResume(): Promise<void> {
     );
   }
 
+  // Check for active workers
+  let workerLine = "";
+  try {
+    const { getActiveWorkers } = await import("../db/worker-queries.ts");
+    const activeWorkers = getActiveWorkers();
+    if (activeWorkers.length > 0) {
+      workerLine = `\n\n**Active workers**: ${activeWorkers.length} running. Use \`blackboard workers\` to check status.`;
+    }
+  } catch {
+    // Worker queries may not be available yet
+  }
+
   // Build resume prompt with workflow context
   const prompt = `## Blackboard: Recent Threads
 
-${threadLines.join("\n")}
+${threadLines.join("\n")}${workerLine}
 
-### Quick Actions
+### Commands
 
-- **Resume work**: \`/blackboard:thread <name>\` loads full context + orchestration
-- **New thread**: \`blackboard thread new <name>\` (kebab-case)
-- **Check status**: \`blackboard thread status [name]\`
+- \`/blackboard:thread <name>\` — load a thread and work on it directly
+- \`/blackboard:threads\` — orchestrate: plan, spawn workers, monitor progress
+- \`blackboard thread new <name>\` — create a new thread
 
-### Workflow Reminder
+### Thread-Worker Model
 
-Threads persist across sessions. When you load a thread:
-1. If no plan exists → enter plan mode, it auto-associates with the thread
-2. If plan exists → use \`blackboard:implementer\` subagents for steps
-3. Record progress with \`/crumb\`, mistakes with \`/oops\`
-4. Use \`/reflect\` before ending session to capture learnings`;
+Threads are independent units of work. You can work on a thread directly, or spawn containerized workers that execute steps autonomously on isolated git branches. Workers push results to \`threads/<name>\` branches without affecting your checkout. Use \`/threads\` to manage the full lifecycle.`;
 
   // Output JSON with systemMessage
   console.log(

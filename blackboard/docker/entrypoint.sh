@@ -22,13 +22,15 @@ done) &
 HEARTBEAT_PID=$!
 trap "kill $HEARTBEAT_PID 2>/dev/null; exit" EXIT SIGTERM SIGINT
 
-# Set up git branch (branch-per-thread, shared across workers)
+# Clone the repo into an isolated working directory (does not affect host checkout)
 BRANCH="threads/${THREAD_NAME}"
-git fetch origin "$BRANCH" 2>/dev/null || true
-git checkout -b "$BRANCH" "origin/$BRANCH" 2>/dev/null || \
-  git checkout -b "$BRANCH" 2>/dev/null || \
-  git checkout "$BRANCH"
-git pull --rebase origin "$BRANCH" 2>/dev/null || true
+WORK_DIR="/app/work"
+
+git clone /app/repo "$WORK_DIR" 2>/dev/null
+cd "$WORK_DIR"
+
+# Check out or create the thread branch
+git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH"
 
 # Main Ralph Wiggum loop
 while [ $iteration -lt $MAX_ITERATIONS ]; do
@@ -46,20 +48,28 @@ while [ $iteration -lt $MAX_ITERATIONS ]; do
 
 ${CONTEXT}
 
-Work on the next pending step. Use the blackboard CLI to record progress:
-- blackboard --db ${DB_PATH} crumb \"summary\" --agent worker
-- blackboard --db ${DB_PATH} oops \"mistake\" --fix \"fix\"
+Work on the next pending step(s). After completing work:
 
-When ALL pending steps are genuinely complete, output '${COMPLETION_PROMISE}'."
+1. Mark completed steps:
+   blackboard --db ${DB_PATH} query \"UPDATE plan_steps SET status = 'completed' WHERE id = '<step_id>'\"
 
-  # Snapshot working tree state before Claude runs (to know what it changed)
-  PRE_STATUS=$(git status --porcelain 2>/dev/null || true)
+2. Record a breadcrumb summarizing what you did:
+   blackboard --db ${DB_PATH} crumb \"<summary>\" --agent worker --files \"<comma-separated files>\"
+
+3. Commit your changes with a meaningful message:
+   git add <files you created/modified>
+   git commit -m \"[${THREAD_NAME}] <description of changes>\" --no-verify
+
+When ALL steps are genuinely complete, also run:
+   blackboard --db ${DB_PATH} query \"UPDATE plans SET status = 'completed' WHERE id = '<plan_id>'\"
+
+Then output '${COMPLETION_PROMISE}'."
 
   # Run Claude CLI
   RESULT=$(claude -p "$PROMPT" \
     --output-format json \
     --dangerously-skip-permissions \
-    --append-system-prompt "When all steps are genuinely complete, output '${COMPLETION_PROMISE}'. Do not output it prematurely. Always include a brief summary of what you accomplished in your response." \
+    --append-system-prompt "When all steps are genuinely complete, output '${COMPLETION_PROMISE}'. Do not output it prematurely." \
     2>/dev/null) || {
     STATUS=$?
     # Rate limit handling with exponential backoff
@@ -79,42 +89,12 @@ When ALL pending steps are genuinely complete, output '${COMPLETION_PROMISE}'."
     continue
   }
 
-  # Only stage files that changed during this iteration (not pre-existing untracked files)
-  POST_STATUS=$(git status --porcelain 2>/dev/null || true)
-  CHANGED_FILES=$(diff <(echo "$PRE_STATUS") <(echo "$POST_STATUS") 2>/dev/null | grep "^>" | sed 's/^> //' | awk '{print $2}' || true)
-
-  if [ -n "$CHANGED_FILES" ]; then
-    echo "$CHANGED_FILES" | xargs git add 2>/dev/null || true
-
-    # Generate a meaningful commit message from the result
-    SUMMARY=$(echo "$RESULT" | node -e "
-const chunks = [];
-process.stdin.on('data', c => chunks.push(c));
-process.stdin.on('end', () => {
-  try {
-    const data = JSON.parse(chunks.join(''));
-    let text = '';
-    if (data && data.result) text = data.result;
-    else if (Array.isArray(data)) text = data.filter(b => b.type==='text').map(b => b.text).join(' ');
-    else text = String(data);
-    const lines = text.split('\\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
-    const summary = (lines[0] || 'Worker iteration').substring(0, 120);
-    process.stdout.write(summary);
-  } catch(e) {
-    process.stdout.write('Worker iteration ${iteration} on thread ${THREAD_NAME}');
-  }
-});
-" 2>/dev/null || echo "Worker iteration $iteration on thread $THREAD_NAME")
-
-    git diff --cached --quiet 2>/dev/null || \
-      git commit -m "[${THREAD_NAME}] ${SUMMARY}" --no-verify 2>/dev/null || true
-  fi
+  # Push commits back to the host repo (origin = /app/repo)
+  git push origin "$BRANCH" 2>/dev/null || true
 
   # Check for completion promise
   if echo "$RESULT" | grep -q "$COMPLETION_PROMISE"; then
     echo "[worker:${WORKER_ID}] Thread work complete after $iteration iterations"
-    git pull --rebase origin "$BRANCH" 2>/dev/null || true
-    git push origin "$BRANCH" 2>/dev/null || true
     blackboard --db "$DB_PATH" query \
       "UPDATE workers SET status = 'completed', iteration = $iteration WHERE id = '$WORKER_ID'" 2>/dev/null || true
     exit 0
@@ -126,8 +106,6 @@ done
 
 # Max iterations reached without completion
 echo "[worker:${WORKER_ID}] Max iterations ($MAX_ITERATIONS) reached"
-git pull --rebase origin "$BRANCH" 2>/dev/null || true
-git push origin "$BRANCH" 2>/dev/null || true
 blackboard --db "$DB_PATH" query \
   "UPDATE workers SET status = 'failed', iteration = $iteration WHERE id = '$WORKER_ID'" 2>/dev/null || true
 exit 1
