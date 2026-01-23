@@ -16,3 +16,8 @@ export {
   threadWorkCommand,
   generateContextPacket,
 } from "./thread.ts";
+export { workersCommand } from "./workers.ts";
+export { killCommand } from "./kill.ts";
+export { spawnCommand } from "./spawn.ts";
+export { drainCommand } from "./drain.ts";
+export { farmCommand } from "./farm.ts";

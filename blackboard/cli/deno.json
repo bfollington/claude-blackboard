@@ -3,8 +3,8 @@
   "version": "0.3.2",
   "exports": "./mod.ts",
   "tasks": {
-    "dev": "deno run --watch --allow-read --allow-write --allow-env --allow-ffi mod.ts",
-    "install": "deno install -g --force --name blackboard --config deno.json --allow-read --allow-write --allow-env --allow-ffi --allow-net=github.com,objects.githubusercontent.com mod.ts"
+    "dev": "deno run --watch --allow-read --allow-write --allow-env --allow-ffi --allow-run=docker,git mod.ts",
+    "install": "deno install -g --force --name blackboard --config deno.json --allow-read --allow-write --allow-env --allow-ffi --allow-net=github.com,objects.githubusercontent.com --allow-run=docker,git mod.ts"
   },
   "imports": {
     "@cliffy/command": "jsr:@cliffy/command@^1.0.0-rc.7",

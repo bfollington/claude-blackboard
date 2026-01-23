@@ -8,6 +8,7 @@ export type StepStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 's
 export type ReflectionTrigger = 'manual' | 'compact' | 'completion' | 'stop';
 export type BugReportStatus = 'open' | 'resolved' | 'wontfix';
 export type ThreadStatus = 'active' | 'paused' | 'completed' | 'archived';
+export type WorkerStatus = 'running' | 'completed' | 'failed' | 'killed';
 
 export interface Thread {
   id: string;
@@ -76,6 +77,18 @@ export interface BugReport {
   repro_steps: string;
   evidence: string | null;
   status: BugReportStatus;
+}
+
+export interface Worker {
+  id: string;
+  container_id: string;
+  thread_id: string;
+  status: WorkerStatus;
+  last_heartbeat: string;
+  created_at: string;
+  auth_mode: 'env' | 'config' | null;
+  iteration: number;
+  max_iterations: number;
 }
 
 // View types
