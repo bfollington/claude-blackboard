@@ -70,6 +70,18 @@ CREATE TABLE IF NOT EXISTS bug_reports (
     status TEXT DEFAULT 'open' CHECK(status IN ('open', 'resolved', 'wontfix'))
 );
 
+CREATE TABLE IF NOT EXISTS workers (
+    id TEXT PRIMARY KEY,
+    container_id TEXT NOT NULL,
+    thread_id TEXT NOT NULL REFERENCES threads(id),
+    status TEXT DEFAULT 'running' CHECK(status IN ('running', 'completed', 'failed', 'killed')),
+    last_heartbeat TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT (datetime('now')),
+    auth_mode TEXT CHECK(auth_mode IN ('env', 'config')),
+    iteration INTEGER DEFAULT 0,
+    max_iterations INTEGER DEFAULT 50
+);
+
 CREATE INDEX IF NOT EXISTS idx_breadcrumbs_plan ON breadcrumbs(plan_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_steps_plan ON plan_steps(plan_id, step_order);
 CREATE INDEX IF NOT EXISTS idx_steps_status ON plan_steps(status);
@@ -77,6 +89,8 @@ CREATE INDEX IF NOT EXISTS idx_threads_updated ON threads(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_threads_status ON threads(status);
 CREATE INDEX IF NOT EXISTS idx_threads_name ON threads(name);
 CREATE INDEX IF NOT EXISTS idx_plans_thread ON plans(thread_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_workers_status ON workers(status);
+CREATE INDEX IF NOT EXISTS idx_workers_thread ON workers(thread_id);
 
 CREATE VIEW IF NOT EXISTS active_plan AS
 SELECT * FROM plans 

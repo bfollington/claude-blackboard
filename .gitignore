@@ -1,4 +1,5 @@
 .DS_Store
+.env
 
 # Claude Code blackboard (project-local data)
 .claude/

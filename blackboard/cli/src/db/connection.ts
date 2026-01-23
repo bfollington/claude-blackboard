@@ -7,6 +7,8 @@
 import { Database } from "@db/sqlite";
 import { dirname, fromFileUrl, join } from "jsr:@std/path";
 import { existsSync } from "jsr:@std/fs";
+import { migrate as migrateThreads } from "./migrations/001_threads.ts";
+import { migrate as migrateWorkers } from "./migrations/002_workers.ts";
 
 let dbInstance: Database | null = null;
 
@@ -77,6 +79,19 @@ export function getDb(path?: string): Database {
 
   // Enable foreign key constraints (critical for referential integrity)
   dbInstance.exec("PRAGMA foreign_keys = ON");
+
+  // Enable WAL mode for concurrent reads/writes
+  dbInstance.exec("PRAGMA journal_mode = WAL");
+  dbInstance.exec("PRAGMA busy_timeout = 30000");
+  dbInstance.exec("PRAGMA synchronous = NORMAL");
+
+  // Run migrations first (adds columns/tables to existing DBs)
+  try {
+    migrateThreads(dbInstance);
+    migrateWorkers(dbInstance);
+  } catch {
+    // Migrations are idempotent - errors mean already migrated
+  }
 
   // Auto-initialize schema (idempotent - uses CREATE IF NOT EXISTS)
   const schema = Deno.readTextFileSync(resolveSchemaPath());

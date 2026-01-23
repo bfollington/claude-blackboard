@@ -27,6 +27,11 @@ import {
   threadListCommand,
   threadStatusCommand,
   threadWorkCommand,
+  workersCommand,
+  killCommand,
+  spawnCommand,
+  drainCommand,
+  farmCommand,
 } from "./commands/mod.ts";
 
 /**
@@ -200,6 +205,57 @@ export const cli = new Command()
   .option("--trigger <type:string>", "Reflection trigger (manual|compact|completion|stop)")
   .action(async (options, content) => {
     await reflectCommand(content, options);
+  })
+  .reset()
+
+  .command("workers", "List and monitor container workers")
+  .option("-a, --all", "Include completed/failed/killed workers")
+  .action(async (options) => {
+    await workersCommand(options);
+  })
+  .reset()
+
+  .command("kill", "Kill a running worker container")
+  .arguments("<worker-id-or-thread-name:string>")
+  .action(async (options, workerIdOrThreadName) => {
+    await killCommand(workerIdOrThreadName, options);
+  })
+  .reset()
+
+  .command("spawn", "Spawn a worker container for a thread")
+  .arguments("<thread-name:string>")
+  .option("--auth <mode:string>", "Auth mode: env or config", { default: "env" })
+  .option("--api-key <key:string>", "Anthropic API key")
+  .option("--repo <path:string>", "Git workspace to mount")
+  .option("--max-iterations <n:number>", "Max iterations", { default: 50 })
+  .option("--memory <size:string>", "Container memory limit", { default: "512m" })
+  .option("--image <name:string>", "Worker image", { default: "blackboard-worker:latest" })
+  .option("--build", "Build worker image before spawning")
+  .action(async (options, threadName) => {
+    await spawnCommand(threadName, options);
+  })
+  .reset()
+
+  .command("drain", "Stop all running worker containers")
+  .option("--force", "Force kill immediately")
+  .option("--timeout <seconds:number>", "Grace period before force kill", { default: 30 })
+  .action(async (options) => {
+    await drainCommand(options);
+  })
+  .reset()
+
+  .command("farm", "Spawn and monitor workers for multiple threads")
+  .option("--threads <names:string>", "Comma-separated thread names")
+  .option("--concurrency <n:number>", "Max simultaneous workers", { default: 3 })
+  .option("--auth <mode:string>", "Auth mode: env or config", { default: "env" })
+  .option("--api-key <key:string>", "Anthropic API key")
+  .option("--repo <path:string>", "Git workspace to mount")
+  .option("--max-iterations <n:number>", "Max iterations per worker", { default: 50 })
+  .option("--memory <size:string>", "Container memory limit", { default: "512m" })
+  .option("--image <name:string>", "Worker image", { default: "blackboard-worker:latest" })
+  .option("--build", "Build worker image before starting")
+  .action(async (options) => {
+    await farmCommand(options);
   })
   .reset()
 
