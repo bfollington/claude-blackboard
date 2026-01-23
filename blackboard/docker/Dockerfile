@@ -21,7 +21,7 @@ RUN chmod +x /app/entrypoint.sh
 
 # Create non-root worker user (Claude CLI rejects --dangerously-skip-permissions as root)
 RUN useradd -m -s /bin/bash worker && \
-    mkdir -p /app/repo /app/db && \
+    mkdir -p /app/repo /app/db /app/work && \
     chown -R worker:worker /app && \
     cp -r /root/.deno /home/worker/.deno && \
     chown -R worker:worker /home/worker/.deno
@@ -34,7 +34,7 @@ RUN /home/worker/.deno/bin/deno task install
 # Cache the SQLite native library at build time
 RUN /home/worker/.deno/bin/deno eval "import '@db/sqlite';" || true
 
-ENV CLAUDE_PROJECT_DIR=/app/repo
+ENV CLAUDE_PROJECT_DIR=/app/work
 ENV CLAUDE_PLUGIN_ROOT=/app
 ENV DENO_INSTALL="/home/worker/.deno"
 ENV PATH="/home/worker/.deno/bin:$PATH"
