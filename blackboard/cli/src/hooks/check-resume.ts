@@ -5,24 +5,7 @@
 
 import { dbExists } from "../db/schema.ts";
 import { listThreads, getStepsForPlan, clearSessionState } from "../db/queries.ts";
-
-/**
- * Formats a relative time string from ISO datetime.
- */
-function relativeTime(isoDate: string): string {
-  const date = new Date(isoDate + "Z"); // Assume UTC
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return isoDate.split("T")[0];
-}
+import { relativeTime } from "../utils/time.ts";
 
 /**
  * Check resume hook handler.

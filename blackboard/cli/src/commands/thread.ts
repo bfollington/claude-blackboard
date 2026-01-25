@@ -18,6 +18,7 @@ import {
   insertPlan,
 } from "../db/queries.ts";
 import { generateId } from "../utils/id.ts";
+import { relativeTime, formatLocalTime } from "../utils/time.ts";
 import type { Thread, ThreadStatus } from "../types/schema.ts";
 
 interface ThreadNewOptions {
@@ -78,23 +79,6 @@ function getCurrentGitBranch(): string | null {
   return null;
 }
 
-/**
- * Formats a relative time string from ISO datetime.
- */
-function relativeTime(isoDate: string): string {
-  const date = new Date(isoDate + "Z"); // Assume UTC
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return isoDate.split("T")[0];
-}
 
 /**
  * Create a new thread.
@@ -305,7 +289,7 @@ export async function threadStatusCommand(
   if (breadcrumbs.length > 0 && !options.brief) {
     console.log("## Recent Breadcrumbs");
     for (const crumb of breadcrumbs) {
-      const time = crumb.created_at.split("T")[1]?.split(".")[0] || "";
+      const time = formatLocalTime(crumb.created_at);
       console.log(`- ${time}: ${crumb.summary}`);
     }
     console.log();
@@ -542,7 +526,7 @@ export function generateContextPacket(thread: Thread): string {
     if (breadcrumbs.length > 0) {
       lines.push("## Recent Breadcrumbs");
       for (const crumb of breadcrumbs.reverse()) {
-        const time = crumb.created_at.split("T")[1]?.split(".")[0] || "";
+        const time = formatLocalTime(crumb.created_at);
         const stepRef = crumb.step_id ? `[step]` : "";
         lines.push(`- ${time} ${stepRef}: ${crumb.summary}`);
       }
