@@ -15,6 +15,7 @@ import type {
   Worker,
 } from "../types/schema.ts";
 import { relativeTime as relativeTimeUtil } from "../utils/time.ts";
+import { getCurrentGitBranch } from "../utils/git.ts";
 import {
   listThreads,
   getStepsForPlan,
@@ -146,26 +147,6 @@ export interface TuiState {
  */
 function relativeTime(dateStr: string): string {
   return relativeTimeUtil(dateStr);
-}
-
-/**
- * Gets the current git branch.
- */
-function getCurrentGitBranch(): string | null {
-  try {
-    const command = new Deno.Command("git", {
-      args: ["rev-parse", "--abbrev-ref", "HEAD"],
-      stdout: "piped",
-      stderr: "null",
-    });
-    const result = command.outputSync();
-    if (result.success) {
-      return new TextDecoder().decode(result.stdout).trim();
-    }
-  } catch {
-    // Not in a git repo or git not available
-  }
-  return null;
 }
 
 /**
