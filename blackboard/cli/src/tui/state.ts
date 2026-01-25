@@ -103,6 +103,7 @@ export interface TuiState {
 
   // Worker state
   workers: Signal<Worker[]>;
+  workerError: Signal<string>;
 
   // Bug reports state
   bugReports: Signal<BugReport[]>;
@@ -175,6 +176,7 @@ export function createTuiState(): TuiState {
 
   // Worker state
   const workers = new Signal<Worker[]>([]);
+  const workerError = new Signal<string>("");
 
   // Bug reports state
   const bugReports = new Signal<BugReport[]>([]);
@@ -309,6 +311,7 @@ export function createTuiState(): TuiState {
     selectedStepIndex,
     selectedCrumbIndex,
     workers,
+    workerError,
     bugReports,
     selectedBugIndex,
     bugFilter,
@@ -681,9 +684,13 @@ export function createTuiActions(state: TuiState): TuiActions {
     },
 
     async spawnWorker(thread: Thread) {
+      // Clear previous error
+      state.workerError.value = "";
+
       // Check Docker availability
       const dockerAvailable = await isDockerAvailable();
       if (!dockerAvailable) {
+        state.workerError.value = "Docker not available - is Docker running?";
         this.setStatusMessage("Docker not available");
         return;
       }
@@ -698,11 +705,13 @@ export function createTuiActions(state: TuiState): TuiActions {
       // Check for API key
       const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
       if (!apiKey) {
+        state.workerError.value = "ANTHROPIC_API_KEY not set in environment";
         this.setStatusMessage("ANTHROPIC_API_KEY not set");
         return;
       }
 
       try {
+        this.setStatusMessage("Spawning worker...");
         const containerOptions: ContainerOptions = {
           image: "blackboard-worker:latest",
           threadName: thread.name,
@@ -731,6 +740,7 @@ export function createTuiActions(state: TuiState): TuiActions {
         this.setStatusMessage(`Worker ${workerId.slice(0, 7)} spawned`);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
+        state.workerError.value = `Spawn failed: ${msg}`;
         this.setStatusMessage(`Spawn failed: ${msg.slice(0, 40)}`);
       }
     },

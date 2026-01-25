@@ -500,12 +500,16 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       }
 
       // Worker operations (on threads tab, any pane)
-      if (event.key === "w" && !event.shift && state.activeTab.value === "threads") {
+      if (event.key === "w" && !event.shift) {
+        if (state.activeTab.value !== "threads") {
+          actions.setStatusMessage("Switch to threads tab first");
+          return;
+        }
         const thread = state.selectedThread.value;
         if (!thread) {
           actions.setStatusMessage("No thread selected");
         } else if (thread.status !== "active" && thread.status !== "paused") {
-          actions.setStatusMessage("Can only spawn workers for active/paused threads");
+          actions.setStatusMessage(`Thread is ${thread.status}, need active/paused`);
         } else {
           actions.setStatusMessage("Spawning worker...");
           // Use .catch() to handle async errors since we can't await in event handler
