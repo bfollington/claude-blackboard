@@ -32,7 +32,8 @@ import {
   insertPlan,
 } from "../db/queries.ts";
 import { getActiveWorkers, updateWorkerStatus, insertWorker } from "../db/worker-queries.ts";
-import { dockerRun, dockerKill, isDockerAvailable, type ContainerOptions } from "../docker/client.ts";
+import { dockerRun, dockerKill, isDockerAvailable, parseEnvFile, type ContainerOptions } from "../docker/client.ts";
+import { join } from "jsr:@std/path";
 import { generateId } from "../utils/id.ts";
 import { dirname } from "jsr:@std/path";
 import { resolveDbPath } from "../db/connection.ts";
@@ -701,11 +702,16 @@ export function createTuiActions(state: TuiState): TuiActions {
       // Resolve paths
       const dbPath = resolveDbPath();
       const dbDir = dirname(dbPath);
+      const repoDir = Deno.cwd();
 
-      // Check for API key
-      const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+      // Load environment variables from .env file in repo root
+      const envFilePath = join(repoDir, ".env");
+      const envVars = await parseEnvFile(envFilePath);
+
+      // Check for API key (from .env or environment)
+      const apiKey = envVars["ANTHROPIC_API_KEY"] || Deno.env.get("ANTHROPIC_API_KEY");
       if (!apiKey) {
-        state.workerError.value = "ANTHROPIC_API_KEY not set in environment";
+        state.workerError.value = "ANTHROPIC_API_KEY not set in .env or environment";
         this.setStatusMessage("ANTHROPIC_API_KEY not set");
         return;
       }
@@ -716,12 +722,13 @@ export function createTuiActions(state: TuiState): TuiActions {
           image: "blackboard-worker:latest",
           threadName: thread.name,
           dbDir,
-          repoDir: Deno.cwd(),
+          repoDir,
           authMode: "env",
           apiKey,
           maxIterations: 50,
           memory: "512m",
           workerId,
+          envVars, // Pass all env vars from .env file
         };
 
         const containerId = await dockerRun(containerOptions);
