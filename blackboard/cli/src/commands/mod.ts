@@ -14,6 +14,7 @@ export {
   threadListCommand,
   threadStatusCommand,
   threadWorkCommand,
+  threadPlanCommand,
   generateContextPacket,
 } from "./thread.ts";
 export { workersCommand } from "./workers.ts";

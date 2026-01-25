@@ -40,6 +40,7 @@ interface OpenFile {
   type: "plan" | "step" | "crumb";
   index?: number;
   originalContent: string;
+  isNew: boolean; // Whether this is creating a new item vs editing existing
 }
 
 // ANSI escape sequences for terminal control
@@ -62,7 +63,8 @@ function restoreTerminal(): void {
 async function openInExternalApp(
   content: string,
   type: "plan" | "step" | "crumb",
-  index?: number
+  index?: number,
+  isNew = false
 ): Promise<OpenFile | null> {
   const suffix = type === "plan" ? ".md" : ".txt";
   const prefix = type === "plan" ? "plan" : type === "step" ? "step" : "crumb";
@@ -100,6 +102,7 @@ async function openInExternalApp(
       type,
       index,
       originalContent: content,
+      isNew,
     };
   } catch {
     return null;
@@ -123,8 +126,13 @@ async function importOpenFile(
 
     switch (openFile.type) {
       case "plan":
-        actions.savePlanMarkdown(newContent);
-        actions.setStatusMessage("Plan imported");
+        if (openFile.isNew) {
+          actions.createPlan(newContent);
+          actions.setStatusMessage("Plan created");
+        } else {
+          actions.savePlanMarkdown(newContent);
+          actions.setStatusMessage("Plan imported");
+        }
         break;
       case "step":
         actions.saveStepDescription(openFile.index ?? 0, newContent.trim());
@@ -439,10 +447,20 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         let content: string | null = null;
         let type: "plan" | "step" | "crumb" = "plan";
         let index: number | undefined;
+        let isNew = false;
 
         if (pane === "plan") {
           content = actions.getPlanMarkdown();
           type = "plan";
+
+          // If no plan exists, create a template for a new plan
+          if (!content) {
+            const thread = state.selectedThread.value;
+            if (thread) {
+              content = `# ${thread.name}\n\n## Overview\n\n## Steps\n\n1. \n2. \n3. \n`;
+              isNew = true;
+            }
+          }
         } else if (pane === "steps") {
           index = state.selectedStepIndex.value;
           content = actions.getStepDescription(index);
@@ -454,10 +472,11 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         }
 
         if (content) {
-          const openFile = await openInExternalApp(content, type, index);
+          const openFile = await openInExternalApp(content, type, index, isNew);
           if (openFile) {
             currentOpenFile = openFile;
-            actions.setStatusMessage(`Opened ${type} - press 'i' to import changes`);
+            const action = isNew ? "Created" : "Opened";
+            actions.setStatusMessage(`${action} ${type} - press 'i' to import changes`);
           } else {
             actions.setStatusMessage("Failed to open file");
           }

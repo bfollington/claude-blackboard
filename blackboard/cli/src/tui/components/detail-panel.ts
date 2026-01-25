@@ -205,7 +205,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
     }
 
     if (!thread.current_plan_id) {
-      if (planRows[0]) planRows[0].text.value = padLine(" No plan for this thread", rectangle.width);
+      if (planRows[0]) planRows[0].text.value = padLine(" No plan - press 'o' to create", rectangle.width);
       for (let i = 1; i < planRows.length; i++) {
         planRows[i].text.value = " ".repeat(rectangle.width);
       }

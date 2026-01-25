@@ -29,6 +29,7 @@ import {
   updateBugReportStatus,
   insertThread,
   resolveThread,
+  insertPlan,
 } from "../db/queries.ts";
 import { getActiveWorkers, updateWorkerStatus, insertWorker } from "../db/worker-queries.ts";
 import { dockerRun, dockerKill, isDockerAvailable, type ContainerOptions } from "../docker/client.ts";
@@ -395,6 +396,7 @@ export interface TuiActions {
   // Edit operations (return content for external editor)
   getPlanMarkdown: () => string | null;
   savePlanMarkdown: (markdown: string) => void;
+  createPlan: (markdown: string) => void;
   getStepDescription: (index: number) => string | null;
   saveStepDescription: (index: number, description: string) => void;
   getCrumbSummary: (index: number) => string | null;
@@ -968,6 +970,38 @@ export function createTuiActions(state: TuiState): TuiActions {
       if (!thread?.current_plan_id) return;
       updatePlanMarkdown(thread.current_plan_id, markdown);
       this.setStatusMessage("Plan updated");
+    },
+
+    createPlan(markdown: string) {
+      const thread = state.selectedThread.value;
+      if (!thread) return;
+
+      const planId = generateId();
+      const description = markdown.split('\n')[0]?.replace(/^#\s*/, '').trim() || 'Untitled plan';
+
+      insertPlan({
+        id: planId,
+        status: 'accepted',
+        description,
+        plan_markdown: markdown,
+        session_id: null,
+        thread_id: thread.id,
+      });
+
+      updateThread(thread.id, { current_plan_id: planId });
+
+      // Refresh thread list to get updated thread
+      const threads = listThreads(state.threadFilter.value === "all" ? undefined : state.threadFilter.value);
+      state.threads.value = threads;
+
+      // Reload details
+      const updatedThread = resolveThread(thread.name);
+      if (updatedThread) {
+        state.selectedThread.value = updatedThread;
+        this.loadThreadDetails(updatedThread);
+      }
+
+      this.setStatusMessage("Plan created");
     },
 
     getStepDescription(index: number) {
