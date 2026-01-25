@@ -123,6 +123,21 @@ If content is omitted, you'll be prompted to enter it interactively.
 Options:
 - `--trigger <type>` - What triggered this reflection (manual|compact|completion|stop)
 
+#### `blackboard init-worker`
+
+Create a project-specific `Dockerfile.worker` template for customizing the worker container environment.
+
+```bash
+blackboard init-worker
+```
+
+This generates a `Dockerfile.worker` in your project root with the base blackboard worker configuration and clearly marked sections for adding project-specific dependencies (language runtimes, packages, build tools, etc.).
+
+Options:
+- `--force` - Overwrite existing Dockerfile.worker if present
+
+The generated Dockerfile includes examples for Python, Rust, Go, and Node.js projects. When you run `blackboard spawn --build` or `blackboard farm --build`, the CLI will use your `Dockerfile.worker` instead of the default plugin Dockerfile.
+
 ### Hook Handlers
 
 These are designed for use by the Claude Code plugin system. They read JSON from stdin and write JSON to stdout.
