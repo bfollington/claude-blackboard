@@ -19,9 +19,9 @@ export interface StatusBarOptions {
 // Keybinding hints for each pane
 const PANE_HINTS: Record<PaneId, string> = {
   list: "j/k:nav a:archive p:pause Tab:focus",
-  plan: "e:edit Tab:focus",
-  steps: "j/k:nav Space:toggle e:edit J/K:reorder Tab:focus",
-  crumbs: "j/k:nav e:edit Tab:focus",
+  plan: "o:open i:import Tab:focus",
+  steps: "j/k:nav Space:toggle o:open i:import J/K:reorder Tab:focus",
+  crumbs: "j/k:nav o:open i:import Tab:focus",
 };
 
 // Pane display names
@@ -148,6 +148,8 @@ export function createHelpOverlay(options: {
     crayon.cyan("  Global:"),
     "    1/2/3     Switch tabs (Threads/Bugs/Reflections)",
     "    Tab       Cycle focus between panes",
+    "    o         Open in external app",
+    "    i         Import changes from open file",
     "    q         Quit dashboard",
     "    ?         Toggle this help",
     "",
@@ -159,7 +161,6 @@ export function createHelpOverlay(options: {
     crayon.cyan("  Steps:"),
     "    j/k       Navigate steps",
     "    Space     Toggle step complete/pending",
-    "    e         Edit step in $EDITOR",
     "    J/K       Move step up/down",
     "",
     crayon.lightBlack("  Press any key to close"),
