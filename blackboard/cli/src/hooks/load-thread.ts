@@ -12,26 +12,7 @@ import {
   setSessionState,
 } from "../db/queries.ts";
 import { generateContextPacket } from "../commands/thread.ts";
-
-/**
- * Gets the current git branch.
- */
-function getCurrentGitBranch(): string | null {
-  try {
-    const command = new Deno.Command("git", {
-      args: ["rev-parse", "--abbrev-ref", "HEAD"],
-      stdout: "piped",
-      stderr: "null",
-    });
-    const result = command.outputSync();
-    if (result.success) {
-      return new TextDecoder().decode(result.stdout).trim();
-    }
-  } catch {
-    // Not in a git repo or git not available
-  }
-  return null;
-}
+import { getCurrentGitBranch } from "../utils/git.ts";
 
 /**
  * Load thread hook handler.

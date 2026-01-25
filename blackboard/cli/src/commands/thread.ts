@@ -18,6 +18,7 @@ import {
   insertPlan,
 } from "../db/queries.ts";
 import { generateId } from "../utils/id.ts";
+import { getCurrentGitBranch } from "../utils/git.ts";
 import { relativeTime, formatLocalTime } from "../utils/time.ts";
 import type { Thread, ThreadStatus } from "../types/schema.ts";
 
@@ -59,25 +60,6 @@ function isValidThreadName(name: string): boolean {
   return /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(name);
 }
 
-/**
- * Gets the current git branch.
- */
-function getCurrentGitBranch(): string | null {
-  try {
-    const command = new Deno.Command("git", {
-      args: ["rev-parse", "--abbrev-ref", "HEAD"],
-      stdout: "piped",
-      stderr: "null",
-    });
-    const result = command.outputSync();
-    if (result.success) {
-      return new TextDecoder().decode(result.stdout).trim();
-    }
-  } catch {
-    // Not in a git repo or git not available
-  }
-  return null;
-}
 
 
 /**
