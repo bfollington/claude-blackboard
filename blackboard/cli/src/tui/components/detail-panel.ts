@@ -259,9 +259,21 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
 
   const updateWorkersSection = () => {
     const workers = state.workersForSelectedThread.value;
+    const workerError = state.workerError.value;
 
     const countStr = workers.length > 0 ? ` (${workers.length})` : "";
     workersHeaderText.value = ` WORKERS${countStr} `;
+
+    // Show error if present
+    if (workerError) {
+      if (workersRows[0]) {
+        workersRows[0].text.value = padLine(` ERROR: ${workerError}`, rectangle.width);
+      }
+      for (let i = 1; i < workersRows.length; i++) {
+        workersRows[i].text.value = " ".repeat(rectangle.width);
+      }
+      return;
+    }
 
     if (workers.length === 0) {
       if (workersRows[0]) {
@@ -423,6 +435,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   state.findState.subscribe(updateCrumbsSection);
   state.workersForSelectedThread.subscribe(updateWorkersSection);
   state.workers.subscribe(updateWorkersSection);
+  state.workerError.subscribe(updateWorkersSection);
 
   // Initial render
   updatePlanSection();
