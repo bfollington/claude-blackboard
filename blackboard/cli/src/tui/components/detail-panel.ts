@@ -9,6 +9,7 @@ import { crayon } from "https://deno.land/x/crayon@3.3.3/mod.ts";
 import type { Tui } from "https://deno.land/x/tui@2.1.11/mod.ts";
 import type { TuiState } from "../state.ts";
 import type { PlanStep, Breadcrumb } from "../../types/schema.ts";
+import { relativeTime as relativeTimeUtil } from "../../utils/time.ts";
 
 export interface DetailPanelOptions {
   tui: Tui;
@@ -590,17 +591,10 @@ function formatCrumbSummary(
 
 /**
  * Create relative time string.
+ * Delegates to the shared utility function, but uses shorter format for TUI.
  */
 function relativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffMins < 1) return "now";
-  if (diffMins < 60) return `${diffMins}m`;
-  if (diffHours < 24) return `${diffHours}h`;
-  return `${diffDays}d`;
+  const result = relativeTimeUtil(dateStr);
+  // Convert "just now" to "now" and "5m ago" to "5m" for compact TUI display
+  return result.replace(" ago", "").replace("just now", "now");
 }

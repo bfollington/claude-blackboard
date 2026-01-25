@@ -5,6 +5,7 @@
 
 import { getDb } from "../db/connection.ts";
 import { formatTable } from "../output/table.ts";
+import { formatLocalDateTime, formatLocalTime } from "../utils/time.ts";
 
 interface StatusOptions {
   db?: string;
@@ -20,8 +21,32 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
 
   if (options.json) {
     // JSON mode - return all data as structured JSON
+    const activePlan = queryOne(db, "SELECT id, status, substr(description, 1, 50) as description, created_at FROM active_plan");
+    const breadcrumbs = queryAll(db, `
+      SELECT created_at, agent_type, substr(summary, 1, 40) as summary
+      FROM breadcrumbs
+      WHERE plan_id = (SELECT id FROM active_plan)
+      ORDER BY created_at DESC
+      LIMIT 5
+    `);
+    const bugReports = queryAll(db, `
+      SELECT id, substr(title, 1, 40) as title, created_at
+      FROM bug_reports
+      WHERE status = 'open'
+      LIMIT 5
+    `);
+    const corrections = queryAll(db, `
+      SELECT created_at, substr(mistake, 1, 40) as mistake
+      FROM corrections
+      ORDER BY created_at DESC
+      LIMIT 3
+    `);
+
     const data = {
-      activePlan: queryOne(db, "SELECT id, status, substr(description, 1, 50) as description, created_at FROM active_plan"),
+      activePlan: activePlan ? {
+        ...activePlan,
+        created_at: formatLocalDateTime(activePlan.created_at)
+      } : null,
       stepsProgress: queryAll(db, `
         SELECT status, COUNT(*) as count
         FROM plan_steps
@@ -41,25 +66,20 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
         ORDER BY step_order
         LIMIT 10
       `),
-      recentBreadcrumbs: queryAll(db, `
-        SELECT substr(created_at, 12, 8) as time, agent_type, substr(summary, 1, 40) as summary
-        FROM breadcrumbs
-        WHERE plan_id = (SELECT id FROM active_plan)
-        ORDER BY created_at DESC
-        LIMIT 5
-      `),
-      openBugReports: queryAll(db, `
-        SELECT id, substr(title, 1, 40) as title, substr(created_at, 1, 10) as date
-        FROM bug_reports
-        WHERE status = 'open'
-        LIMIT 5
-      `),
-      recentCorrections: queryAll(db, `
-        SELECT substr(created_at, 1, 10) as date, substr(mistake, 1, 40) as mistake
-        FROM corrections
-        ORDER BY created_at DESC
-        LIMIT 3
-      `),
+      recentBreadcrumbs: breadcrumbs.map(b => ({
+        time: formatLocalTime(b.created_at),
+        agent_type: b.agent_type,
+        summary: b.summary
+      })),
+      openBugReports: bugReports.map(b => ({
+        id: b.id,
+        title: b.title,
+        date: formatLocalDateTime(b.created_at).split(' ')[0]
+      })),
+      recentCorrections: corrections.map(c => ({
+        date: formatLocalDateTime(c.created_at).split(' ')[0],
+        mistake: c.mistake
+      })),
     };
     console.log(JSON.stringify(data, null, 2));
     return;
@@ -76,7 +96,7 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
   if (activePlan) {
     console.log(formatTable(
       ["id", "status", "description", "created_at"],
-      [[activePlan.id, activePlan.status, activePlan.description || "", activePlan.created_at]]
+      [[activePlan.id, activePlan.status, activePlan.description || "", formatLocalDateTime(activePlan.created_at)]]
     ));
   } else {
     console.log("  (no active plan)");
@@ -129,7 +149,7 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
   // Recent Breadcrumbs
   console.log("Recent Breadcrumbs (last 5):");
   const breadcrumbs = queryAll(db, `
-    SELECT substr(created_at, 12, 8) as time, agent_type, substr(summary, 1, 40) as summary
+    SELECT created_at, agent_type, substr(summary, 1, 40) as summary
     FROM breadcrumbs
     WHERE plan_id = (SELECT id FROM active_plan)
     ORDER BY created_at DESC
@@ -138,7 +158,7 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
   if (breadcrumbs.length > 0) {
     console.log(formatTable(
       ["time", "agent_type", "summary"],
-      breadcrumbs.map(r => [r.time || "", r.agent_type || "", r.summary])
+      breadcrumbs.map(r => [formatLocalTime(r.created_at), r.agent_type || "", r.summary])
     ));
   } else {
     console.log("  (no breadcrumbs)");
@@ -147,16 +167,16 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
 
   // Open Bug Reports
   console.log("Open Bug Reports (last 5):");
-  const bugReports = queryAll(db, `
-    SELECT id, substr(title, 1, 40) as title, substr(created_at, 1, 10) as date
+  const bugReportsTable = queryAll(db, `
+    SELECT id, substr(title, 1, 40) as title, created_at
     FROM bug_reports
     WHERE status = 'open'
     LIMIT 5
   `);
-  if (bugReports.length > 0) {
+  if (bugReportsTable.length > 0) {
     console.log(formatTable(
       ["id", "title", "date"],
-      bugReports.map(r => [r.id, r.title, r.date])
+      bugReportsTable.map(r => [r.id, r.title, formatLocalDateTime(r.created_at).split(' ')[0]])
     ));
   } else {
     console.log("  (no open bug reports)");
@@ -165,16 +185,16 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
 
   // Recent Corrections
   console.log("Recent Corrections (last 3):");
-  const corrections = queryAll(db, `
-    SELECT substr(created_at, 1, 10) as date, substr(mistake, 1, 40) as mistake
+  const correctionsTable = queryAll(db, `
+    SELECT created_at, substr(mistake, 1, 40) as mistake
     FROM corrections
     ORDER BY created_at DESC
     LIMIT 3
   `);
-  if (corrections.length > 0) {
+  if (correctionsTable.length > 0) {
     console.log(formatTable(
       ["date", "mistake"],
-      corrections.map(r => [r.date, r.mistake])
+      correctionsTable.map(r => [formatLocalDateTime(r.created_at).split(' ')[0], r.mistake])
     ));
   } else {
     console.log("  (no corrections)");
