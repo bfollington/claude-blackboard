@@ -149,7 +149,7 @@ export async function dockerRun(options: ContainerOptions): Promise<string> {
     "--label",
     `blackboard.worker-id=${options.workerId}`,
     "--memory",
-    options.memory || "512m",
+    options.memory || "1g",
     "-v",
     `${options.dbDir}:/app/db:rw`,
   ];
