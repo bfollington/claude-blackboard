@@ -362,7 +362,9 @@ function padLine(text: string, width: number): string {
 }
 
 /**
- * Highlight matches in text using reverse video.
+ * Highlight matches in text using plain text markers.
+ * Current match: <<match>>
+ * Other matches: [match]
  */
 function highlightMatches(
   text: string,
@@ -383,14 +385,14 @@ function highlightMatches(
       parts.push(text.slice(lastIndex, matchIndex));
     }
 
-    // Add highlighted match
+    // Add highlighted match with plain text markers
     const matchedText = text.slice(matchIndex, matchIndex + query.length);
     if (isCurrent) {
-      // Current match: yellow background
-      parts.push(crayon.bgYellow.black(matchedText));
+      // Current match: <<match>>
+      parts.push(`<<${matchedText}>>`);
     } else {
-      // Other matches: use bold white on dark background
-      parts.push(crayon.bold.white(matchedText));
+      // Other matches: [match]
+      parts.push(`[${matchedText}]`);
     }
 
     lastIndex = matchIndex + query.length;
