@@ -39,14 +39,16 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   const components: (Text | Box)[] = [];
 
   // Calculate section heights
-  const planHeight = Math.max(3, Math.floor(rectangle.height * 0.2));
-  const remainingHeight = rectangle.height - planHeight;
-  const stepsHeight = Math.floor(remainingHeight * 0.5);
+  const planHeight = 3; // Header + 2 content rows
+  const workersHeight = 4; // Header + 3 worker rows
+  const remainingHeight = rectangle.height - planHeight - workersHeight;
+  const stepsHeight = Math.floor(remainingHeight * 0.45);
   const crumbsHeight = remainingHeight - stepsHeight;
 
   // Section starting rows
   const planRow = rectangle.row;
-  const stepsRow = planRow + planHeight;
+  const workersRow = planRow + planHeight;
+  const stepsRow = workersRow + workersHeight;
   const crumbsRow = stepsRow + stepsHeight;
 
   // =========================================================================
@@ -89,6 +91,48 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
       zIndex: 2,
     });
     planRows.push({ text: rowText, component: text });
+    components.push(text);
+  }
+
+  // =========================================================================
+  // WORKERS SECTION
+  // =========================================================================
+  const workersPanel = new Box({
+    parent: tui,
+    theme: { base: crayon.bgBlack },
+    rectangle: {
+      column: rectangle.column,
+      row: workersRow,
+      width: rectangle.width,
+      height: workersHeight,
+    },
+    zIndex: 1,
+  });
+  components.push(workersPanel);
+
+  // Workers header
+  const workersHeaderText = new Signal<string>(" WORKERS ");
+  const workersHeader = new Text({
+    parent: tui,
+    text: workersHeaderText,
+    theme: { base: crayon.bgBlack.white.bold },
+    rectangle: { column: rectangle.column, row: workersRow },
+    zIndex: 2,
+  });
+  components.push(workersHeader);
+
+  // Workers content rows
+  const workersRows: { text: Signal<string>; component: Text }[] = [];
+  for (let i = 1; i < workersHeight; i++) {
+    const rowText = new Signal<string>("");
+    const text = new Text({
+      parent: tui,
+      text: rowText,
+      theme: { base: crayon.bgBlack.white },
+      rectangle: { column: rectangle.column, row: workersRow + i },
+      zIndex: 2,
+    });
+    workersRows.push({ text: rowText, component: text });
     components.push(text);
   }
 
@@ -185,16 +229,10 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   const updatePlanSection = () => {
     const thread = state.selectedThread.value;
     const isFocused = state.focusedPane.value === "plan";
-    const workers = state.workersForSelectedThread.value;
-
-    // Show worker count in header
-    const workerInfo = workers.length > 0
-      ? ` [${workers.length}w]`
-      : "";
 
     planHeaderText.value = isFocused
-      ? `>> PLAN${workerInfo} <<`
-      : ` PLAN${workerInfo} `;
+      ? `>> PLAN <<`
+      : ` PLAN `;
 
     if (!thread) {
       if (planRows[0]) planRows[0].text.value = padLine(" Select a thread to view its plan", rectangle.width);
@@ -216,6 +254,44 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
     if (planRows[0]) planRows[0].text.value = padLine(" Plan available - press 'e' to edit", rectangle.width);
     for (let i = 1; i < planRows.length; i++) {
       planRows[i].text.value = " ".repeat(rectangle.width);
+    }
+  };
+
+  const updateWorkersSection = () => {
+    const workers = state.workersForSelectedThread.value;
+
+    const countStr = workers.length > 0 ? ` (${workers.length})` : "";
+    workersHeaderText.value = ` WORKERS${countStr} `;
+
+    if (workers.length === 0) {
+      if (workersRows[0]) {
+        workersRows[0].text.value = padLine(" No active workers", rectangle.width);
+      }
+      if (workersRows[1]) {
+        workersRows[1].text.value = padLine(" Press 'w' to spawn a worker", rectangle.width);
+      }
+      for (let i = 2; i < workersRows.length; i++) {
+        workersRows[i].text.value = " ".repeat(rectangle.width);
+      }
+      return;
+    }
+
+    // Show workers with status
+    for (let i = 0; i < workersRows.length; i++) {
+      if (i < workers.length) {
+        const worker = workers[i];
+        const shortId = worker.id.slice(0, 7);
+        const status = worker.status;
+        const iteration = worker.iteration || 0;
+        const maxIter = worker.max_iterations || 50;
+        const heartbeat = worker.last_heartbeat ? relativeTime(worker.last_heartbeat) : "—";
+
+        // Format: " abc1234 running [5/50] heartbeat: 10s ago"
+        const line = ` ${shortId} ${status} [${iteration}/${maxIter}] heartbeat: ${heartbeat}`;
+        workersRows[i].text.value = padLine(line, rectangle.width);
+      } else {
+        workersRows[i].text.value = " ".repeat(rectangle.width);
+      }
     }
   };
 
@@ -332,6 +408,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
 
   // Subscribe to state changes
   state.selectedThread.subscribe(updatePlanSection);
+  state.selectedThread.subscribe(updateWorkersSection);
   state.selectedThread.subscribe(updateStepsSection);
   state.selectedThread.subscribe(updateCrumbsSection);
   state.focusedPane.subscribe(updatePlanSection);
@@ -344,10 +421,12 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   state.findState.subscribe(updatePlanSection);
   state.findState.subscribe(updateStepsSection);
   state.findState.subscribe(updateCrumbsSection);
-  state.workersForSelectedThread.subscribe(updatePlanSection);
+  state.workersForSelectedThread.subscribe(updateWorkersSection);
+  state.workers.subscribe(updateWorkersSection);
 
   // Initial render
   updatePlanSection();
+  updateWorkersSection();
   updateStepsSection();
   updateCrumbsSection();
 
