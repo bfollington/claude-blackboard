@@ -26,6 +26,7 @@ import {
   threadNewCommand,
   threadListCommand,
   threadStatusCommand,
+  threadPlanCommand,
   workersCommand,
   killCommand,
   spawnCommand,
@@ -45,6 +46,7 @@ const threadCommand = new Command()
     console.log("  new <name>      Create a new thread");
     console.log("  list            List all threads");
     console.log("  status [name]   Show thread status");
+    console.log("  plan <name>     Edit or create a plan for a thread");
     console.log("\nTo work on a thread, use: blackboard work <name>");
   })
   .command("new", "Create a new thread")
@@ -68,6 +70,14 @@ const threadCommand = new Command()
   .option("-b, --brief", "Brief output (no plan markdown)")
   .action(async (options: { brief?: boolean }, name?: string) => {
     await threadStatusCommand(name, options);
+  })
+  .reset()
+  .command("plan", "Edit or create a plan for a thread")
+  .arguments("<name:string> [file:string]")
+  .option("-d, --db <path:string>", "Database path")
+  .option("-q, --quiet", "Suppress non-essential output")
+  .action(async (options: { db?: string; quiet?: boolean }, name: string, file?: string) => {
+    await threadPlanCommand(name, { ...options, file });
   });
 
 /**

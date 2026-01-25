@@ -13,6 +13,9 @@ import {
   getStepsForPlan,
   getRecentBreadcrumbs,
   getOpenBugReports,
+  getPlanById,
+  updatePlanMarkdown,
+  insertPlan,
 } from "../db/queries.ts";
 import { generateId } from "../utils/id.ts";
 import type { Thread, ThreadStatus } from "../types/schema.ts";
@@ -40,6 +43,12 @@ interface ThreadStatusOptions {
 interface ThreadWorkOptions {
   db?: string;
   quiet?: boolean;
+}
+
+interface ThreadPlanOptions {
+  db?: string;
+  quiet?: boolean;
+  file?: string;
 }
 
 /**
@@ -353,6 +362,137 @@ export async function threadWorkCommand(
   const child = command.spawn();
   const status = await child.status;
   Deno.exit(status.code);
+}
+
+/**
+ * Opens content in the user's editor and returns the edited content.
+ * Creates a temp file, waits for the editor to close, then reads the result.
+ */
+async function openInEditor(content: string): Promise<string | null> {
+  // Create temp file with .md extension
+  const tempFile = await Deno.makeTempFile({ suffix: ".md" });
+
+  try {
+    // Write initial content
+    await Deno.writeTextFile(tempFile, content);
+
+    // Get editor from env (VISUAL first, then EDITOR, default to vim)
+    const editor = Deno.env.get("VISUAL") || Deno.env.get("EDITOR") || "vim";
+
+    // Split editor command to handle cases like "code --wait"
+    const editorParts = editor.split(/\s+/);
+    const editorCmd = editorParts[0];
+    const editorArgs = editorParts.slice(1);
+
+    // Open editor and wait for it to close
+    const command = new Deno.Command(editorCmd, {
+      args: [...editorArgs, tempFile],
+      stdin: "inherit",
+      stdout: "inherit",
+      stderr: "inherit",
+    });
+
+    const child = command.spawn();
+    const status = await child.status;
+
+    if (!status.success) {
+      console.error("Editor exited with error");
+      return null;
+    }
+
+    // Read the edited content
+    const editedContent = await Deno.readTextFile(tempFile);
+    return editedContent;
+  } finally {
+    // Clean up temp file
+    try {
+      await Deno.remove(tempFile);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+}
+
+/**
+ * Edit or create a plan for a thread.
+ * If a file path is provided, reads the plan from that file.
+ * Otherwise, opens an external editor.
+ */
+export async function threadPlanCommand(
+  name: string,
+  options: ThreadPlanOptions
+): Promise<void> {
+  const thread = resolveThread(name);
+  if (!thread) {
+    console.error(`Error: Thread "${name}" not found`);
+    Deno.exit(1);
+  }
+
+  let result: string | null = null;
+
+  // If file provided, read from it directly
+  if (options.file) {
+    try {
+      result = await Deno.readTextFile(options.file);
+    } catch (err) {
+      console.error(`Error reading file "${options.file}": ${err instanceof Error ? err.message : err}`);
+      Deno.exit(1);
+    }
+  } else {
+    // Get existing plan or create template for editor
+    let content = '';
+
+    if (thread.current_plan_id) {
+      const plan = getPlanById(thread.current_plan_id);
+      content = plan?.plan_markdown || '';
+    } else {
+      // Create a template for new plans
+      content = `# ${name}\n\n## Overview\n\n## Steps\n\n1. \n2. \n3. \n`;
+    }
+
+    // Open in editor, wait for save
+    result = await openInEditor(content);
+
+    if (!result) {
+      console.error("Failed to get edited content");
+      Deno.exit(1);
+    }
+
+    // Check if content changed (only for editor mode)
+    if (result === content) {
+      if (!options.quiet) {
+        console.log("No changes made");
+      }
+      return;
+    }
+  }
+
+  // Update existing plan or create new one
+  if (thread.current_plan_id) {
+    updatePlanMarkdown(thread.current_plan_id, result);
+    if (!options.quiet) {
+      console.log(`Plan updated for thread "${name}"`);
+    }
+  } else {
+    // Create new plan
+    const planId = generateId();
+    const description = result.split('\n')[0]?.replace(/^#\s*/, '').trim() || 'Untitled';
+
+    insertPlan({
+      id: planId,
+      status: 'accepted',
+      description,
+      plan_markdown: result,
+      session_id: null,
+      thread_id: thread.id,
+    });
+
+    updateThread(thread.id, { current_plan_id: planId });
+
+    if (!options.quiet) {
+      console.log(`Plan created for thread "${name}"`);
+    }
+  }
 }
 
 /**
