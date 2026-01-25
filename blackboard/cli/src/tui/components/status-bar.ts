@@ -7,7 +7,7 @@ import { Text, Box } from "https://deno.land/x/tui@2.1.11/src/components/mod.ts"
 import { Signal, Computed } from "https://deno.land/x/tui@2.1.11/src/signals/mod.ts";
 import { crayon } from "https://deno.land/x/crayon@3.3.3/mod.ts";
 import type { Tui } from "https://deno.land/x/tui@2.1.11/mod.ts";
-import type { TuiState, PaneId } from "../state.ts";
+import type { TuiState, PaneId, TabId } from "../state.ts";
 
 export interface StatusBarOptions {
   tui: Tui;
@@ -18,7 +18,7 @@ export interface StatusBarOptions {
 
 // Keybinding hints for each pane
 const PANE_HINTS: Record<PaneId, string> = {
-  list: "j/k:nav w:spawn W:kill a:archive p:pause /:find",
+  list: "j/k:nav n:new w:spawn W:kill a:archive p:pause",
   plan: "o:open i:import /:find Tab:focus",
   steps: "j/k:nav Space:toggle o:open J/K:reorder /:find",
   crumbs: "j/k:nav o:open /:find Tab:focus",
@@ -59,6 +59,7 @@ export function createStatusBar(options: StatusBarOptions): () => void {
     const thread = state.selectedThread.value;
     const pane = state.focusedPane.value;
     const message = state.statusMessage.value;
+    const activeTab = state.activeTab.value;
 
     // Build plain text status line
     const parts: string[] = [];
@@ -72,7 +73,15 @@ export function createStatusBar(options: StatusBarOptions): () => void {
 
     // Separator and hints
     parts.push(" | ");
-    parts.push(PANE_HINTS[pane]);
+
+    // Show tab-specific hints
+    if (activeTab === "bugs") {
+      parts.push("j/k:nav r:resolve x:wontfix o:reopen Shift+Tab:filter");
+    } else {
+      // Default to pane-specific hints for threads tab
+      parts.push(PANE_HINTS[pane]);
+    }
+
     parts.push(" | q:quit");
 
     // Status message (if any)

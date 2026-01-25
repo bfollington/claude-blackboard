@@ -27,6 +27,8 @@ import {
   updateBreadcrumbSummary,
   listBugReports,
   updateBugReportStatus,
+  insertThread,
+  resolveThread,
 } from "../db/queries.ts";
 import { getActiveWorkers, updateWorkerStatus, insertWorker } from "../db/worker-queries.ts";
 import { dockerRun, dockerKill, isDockerAvailable, type ContainerOptions } from "../docker/client.ts";
@@ -121,6 +123,10 @@ export interface TuiState {
   isLoading: Signal<boolean>;
   statusMessage: Signal<string>;
 
+  // Thread creation state
+  isCreatingThread: Signal<boolean>;
+  newThreadName: Signal<string>;
+
   // Find/search state
   findState: Signal<FindState>;
 }
@@ -178,6 +184,10 @@ export function createTuiState(): TuiState {
   const shouldQuit = new Signal<boolean>(false);
   const isLoading = new Signal<boolean>(false);
   const statusMessage = new Signal<string>("");
+
+  // Thread creation state
+  const isCreatingThread = new Signal<boolean>(false);
+  const newThreadName = new Signal<string>("");
 
   // Find/search state
   const findState = new Signal<FindState>({
@@ -312,6 +322,8 @@ export function createTuiState(): TuiState {
     shouldQuit,
     isLoading,
     statusMessage,
+    isCreatingThread,
+    newThreadName,
     findState,
   };
 }
@@ -345,6 +357,12 @@ export interface TuiActions {
   // Thread operations
   archiveThread: (thread: Thread) => void;
   toggleThreadPause: (thread: Thread) => void;
+
+  // Thread creation
+  startCreateThread: () => void;
+  updateNewThreadName: (name: string) => void;
+  confirmCreateThread: () => void;
+  cancelCreateThread: () => void;
 
   // Worker operations
   loadWorkers: () => void;
@@ -609,6 +627,52 @@ export function createTuiActions(state: TuiState): TuiActions {
       );
     },
 
+    startCreateThread() {
+      state.isCreatingThread.value = true;
+      state.newThreadName.value = "";
+    },
+
+    updateNewThreadName(name: string) {
+      state.newThreadName.value = name;
+    },
+
+    confirmCreateThread() {
+      const name = state.newThreadName.value.trim();
+
+      // Validate kebab-case
+      if (!/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(name)) {
+        this.setStatusMessage("Name must be kebab-case (e.g., my-feature)");
+        return;
+      }
+
+      // Check if exists
+      const existing = resolveThread(name);
+      if (existing) {
+        this.setStatusMessage(`Thread "${name}" already exists`);
+        return;
+      }
+
+      // Create thread
+      const threadId = generateId();
+      insertThread({
+        id: threadId,
+        name,
+        current_plan_id: null,
+        git_branches: null,
+        status: "active",
+      });
+
+      state.isCreatingThread.value = false;
+      state.newThreadName.value = "";
+      this.loadThreads();
+      this.setStatusMessage(`Thread "${name}" created`);
+    },
+
+    cancelCreateThread() {
+      state.isCreatingThread.value = false;
+      state.newThreadName.value = "";
+    },
+
     loadWorkers() {
       const activeWorkers = getActiveWorkers();
       state.workers.value = activeWorkers;
@@ -759,6 +823,10 @@ export function createTuiActions(state: TuiState): TuiActions {
       const thread = state.selectedThread.value;
       if (thread) {
         this.loadThreadDetails(thread);
+      }
+      // Also refresh bugs when on bugs tab
+      if (state.activeTab.value === "bugs") {
+        this.loadBugReports();
       }
     },
 

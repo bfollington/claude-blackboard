@@ -17,6 +17,8 @@ import { createThreadList } from "./components/thread-list.ts";
 import { createDetailPanel } from "./components/detail-panel.ts";
 import { createStatusBar } from "./components/status-bar.ts";
 import { createFindInput } from "./components/find-input.ts";
+import { createThreadInput } from "./components/thread-input.ts";
+import { createBugList } from "./components/bug-list.ts";
 
 export interface TuiOptions {
   db?: string;
@@ -170,6 +172,10 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
   // Track currently open file for import
   let currentOpenFile: OpenFile | null = null;
 
+  // Track tab-specific cleanup functions
+  let threadTabCleanups: Array<() => void> = [];
+  let bugsTabCleanups: Array<() => void> = [];
+
   // Ensure terminal is restored on exit
   const cleanup = () => {
     restoreTerminal();
@@ -198,29 +204,6 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     const leftPanelWidth = Math.max(20, Math.floor(terminalSize.columns * 0.25));
 
     const cleanupTabBar = createTabBar({ tui, state, row: 0 });
-    const cleanupThreadList = createThreadList({
-      tui,
-      state,
-      rectangle: {
-        column: 0,
-        row: 1,
-        width: leftPanelWidth,
-        height: terminalSize.rows - 2,
-      },
-    });
-
-    const detailPanelColumn = leftPanelWidth + 1;
-    const detailPanelWidth = terminalSize.columns - detailPanelColumn;
-    const cleanupDetailPanel = createDetailPanel({
-      tui,
-      state,
-      rectangle: {
-        column: detailPanelColumn,
-        row: 1,
-        width: detailPanelWidth,
-        height: terminalSize.rows - 2,
-      },
-    });
 
     // Status bar at bottom
     const cleanupStatusBar = createStatusBar({
@@ -229,6 +212,85 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       row: terminalSize.rows - 1,
       width: terminalSize.columns,
     });
+
+    // Tab rendering functions
+    const renderThreadsTab = () => {
+      // Clean up any existing thread tab components
+      threadTabCleanups.forEach(cleanup => cleanup());
+      threadTabCleanups = [];
+
+      const cleanupThreadList = createThreadList({
+        tui,
+        state,
+        rectangle: {
+          column: 0,
+          row: 1,
+          width: leftPanelWidth,
+          height: terminalSize.rows - 2,
+        },
+      });
+
+      const detailPanelColumn = leftPanelWidth + 1;
+      const detailPanelWidth = terminalSize.columns - detailPanelColumn;
+      const cleanupDetailPanel = createDetailPanel({
+        tui,
+        state,
+        rectangle: {
+          column: detailPanelColumn,
+          row: 1,
+          width: detailPanelWidth,
+          height: terminalSize.rows - 2,
+        },
+      });
+
+      threadTabCleanups.push(cleanupThreadList, cleanupDetailPanel);
+    };
+
+    const renderBugsTab = () => {
+      // Clean up any existing bugs tab components
+      bugsTabCleanups.forEach(cleanup => cleanup());
+      bugsTabCleanups = [];
+
+      // Load bug reports
+      actions.loadBugReports();
+
+      // Bug list uses full width (no detail panel)
+      const cleanupBugList = createBugList({
+        tui,
+        state,
+        rectangle: {
+          column: 0,
+          row: 1,
+          width: terminalSize.columns,
+          height: terminalSize.rows - 2,
+        },
+      });
+
+      bugsTabCleanups.push(cleanupBugList);
+    };
+
+    // Subscribe to tab changes to switch components
+    state.activeTab.subscribe((tab) => {
+      if (tab === "threads") {
+        // Clean up bugs tab, render threads tab
+        bugsTabCleanups.forEach(cleanup => cleanup());
+        bugsTabCleanups = [];
+        renderThreadsTab();
+      } else if (tab === "bugs") {
+        // Clean up threads tab, render bugs tab
+        threadTabCleanups.forEach(cleanup => cleanup());
+        threadTabCleanups = [];
+        renderBugsTab();
+      }
+      // Note: reflections tab not implemented yet
+    });
+
+    // Initial render based on active tab
+    if (state.activeTab.value === "bugs") {
+      renderBugsTab();
+    } else {
+      renderThreadsTab();
+    }
 
     // Find input overlay (conditionally rendered based on state)
     const findInputCleanups: Array<() => void> = [];
@@ -258,6 +320,32 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     // Initial check
     updateFindInput();
 
+    // Thread input overlay (conditionally rendered based on state)
+    const threadInputCleanups: Array<() => void> = [];
+    const updateThreadInput = () => {
+      if (state.isCreatingThread.value && threadInputCleanups.length === 0) {
+        const cleanup = createThreadInput({
+          tui,
+          state,
+          onNameChange: (name) => actions.updateNewThreadName(name),
+          onConfirm: () => actions.confirmCreateThread(),
+          onCancel: () => actions.cancelCreateThread(),
+        });
+        threadInputCleanups.push(cleanup);
+      } else if (!state.isCreatingThread.value && threadInputCleanups.length > 0) {
+        const cleanup = threadInputCleanups.pop();
+        cleanup?.();
+      }
+    };
+
+    // Watch for thread creation state changes
+    state.isCreatingThread.subscribe(() => {
+      updateThreadInput();
+    });
+
+    // Initial check
+    updateThreadInput();
+
     // Set up auto-refresh every 5 seconds
     const REFRESH_INTERVAL_MS = 5000;
     const refreshInterval = setInterval(() => {
@@ -284,11 +372,19 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         return;
       }
 
-      // Find navigation keys (only when not in find input mode)
+      // 'n' key: context-dependent (find next OR create new thread)
       if (!findActive && event.key === "n") {
-        actions.findNext();
+        const findState = state.findState.value;
+        // If there are find matches, 'n' navigates to next match
+        if (findState.matches.length > 0) {
+          actions.findNext();
+        // Otherwise, if focused on list pane and not creating thread, 'n' creates new thread
+        } else if (!state.isCreatingThread.value && state.focusedPane.value === "list") {
+          actions.startCreateThread();
+        }
         return;
       }
+      // Shift+N always does find previous (if matches exist)
       if (!findActive && event.shift && event.key === "n") {
         actions.findPrevious();
         return;
@@ -309,6 +405,11 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
 
       // Don't process other keys if find input is active
       if (findActive) {
+        return;
+      }
+
+      // Skip other key handling if creating thread
+      if (state.isCreatingThread.value) {
         return;
       }
 
@@ -410,7 +511,38 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         return;
       }
 
-      // Navigation and actions based on focused pane
+      // Bug tab navigation and actions
+      if (state.activeTab.value === "bugs") {
+        const isDown = event.key === "j" || event.key === "down";
+        const isUp = event.key === "k" || event.key === "up";
+
+        if (isDown) { actions.moveBugSelection(1); return; }
+        if (isUp) { actions.moveBugSelection(-1); return; }
+
+        // Filter cycling with Shift+Tab
+        if (event.shift && event.key === "tab") { actions.cycleBugFilter(); return; }
+
+        // Status changes
+        const bug = state.selectedBug.value;
+        if (event.key === "r" && !event.shift) {
+          // 'r' = resolve
+          if (bug && bug.status === "open") actions.updateBugStatus(bug, "resolved");
+          return;
+        }
+        if (event.key === "r" && event.shift) {
+          // Shift+R = reopen
+          if (bug && bug.status !== "open") actions.updateBugStatus(bug, "open");
+          return;
+        }
+        if (event.key === "x") {
+          // 'x' = won't fix
+          if (bug && bug.status === "open") actions.updateBugStatus(bug, "wontfix");
+          return;
+        }
+        return; // Don't process other keys when on bugs tab
+      }
+
+      // Navigation and actions based on focused pane (threads tab only)
       handlePaneKeyPress(event, state, actions);
     });
 
@@ -429,9 +561,10 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
 
     // Clean up TUI
     findInputCleanups.pop()?.();
+    threadInputCleanups.pop()?.();
     cleanupStatusBar();
-    cleanupDetailPanel();
-    cleanupThreadList();
+    threadTabCleanups.forEach(cleanup => cleanup());
+    bugsTabCleanups.forEach(cleanup => cleanup());
     cleanupTabBar();
 
     // Clear refresh interval
