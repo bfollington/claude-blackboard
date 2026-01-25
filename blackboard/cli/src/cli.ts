@@ -28,6 +28,7 @@ import {
   threadStatusCommand,
   threadPlanCommand,
   workersCommand,
+  logsCommand,
   killCommand,
   spawnCommand,
   drainCommand,
@@ -290,6 +291,17 @@ export const cli = new Command()
   .option("-a, --all", "Include completed/failed/killed workers")
   .action(async (options) => {
     await workersCommand(options);
+  })
+  .reset()
+
+  .command("logs", "View logs for a worker")
+  .arguments("<worker-id:string>")
+  .option("-s, --stream <type:string>", "Filter by stream: stdout, stderr, or system")
+  .option("-t, --tail <n:number>", "Show last N lines")
+  .option("-f, --follow", "Follow log output")
+  .option("-i, --iteration <n:number>", "Filter by iteration number")
+  .action(async (options, workerId) => {
+    await logsCommand(workerId, options);
   })
   .reset()
 
