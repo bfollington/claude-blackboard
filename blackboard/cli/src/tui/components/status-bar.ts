@@ -18,7 +18,7 @@ export interface StatusBarOptions {
 
 // Keybinding hints for each pane
 const PANE_HINTS: Record<PaneId, string> = {
-  list: "j/k:nav n:new w:spawn W:kill a:archive p:pause",
+  list: "j/k:nav n:new w:spawn W:kill a:archive p:pause m:merge",
   plan: "o:open i:import /:find Tab:focus",
   steps: "j/k:nav Space:toggle o:open J/K:reorder /:find",
   crumbs: "j/k:nav o:open /:find Tab:focus",
@@ -166,6 +166,7 @@ export function createHelpOverlay(options: {
     "    j/k       Navigate threads",
     "    a         Archive selected thread",
     "    p         Pause/resume thread",
+    "    m         Merge thread branch and archive",
     "",
     crayon.cyan("  Steps:"),
     "    j/k       Navigate steps",

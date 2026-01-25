@@ -19,6 +19,7 @@ import { createStatusBar } from "./components/status-bar.ts";
 import { createFindInput } from "./components/find-input.ts";
 import { createThreadInput } from "./components/thread-input.ts";
 import { createBugList } from "./components/bug-list.ts";
+import { createConfirmDialog } from "./components/confirm-dialog.ts";
 
 export interface TuiOptions {
   db?: string;
@@ -354,6 +355,31 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     // Initial check
     updateThreadInput();
 
+    // Confirmation dialog overlay (conditionally rendered based on state)
+    const confirmDialogCleanups: Array<() => void> = [];
+    const updateConfirmDialog = () => {
+      if (state.isConfirming.value && confirmDialogCleanups.length === 0) {
+        const cleanup = createConfirmDialog({
+          tui,
+          message: state.confirmMessage.value,
+          onConfirm: () => actions.confirmDialogYes(),
+          onCancel: () => actions.confirmDialogNo(),
+        });
+        confirmDialogCleanups.push(cleanup);
+      } else if (!state.isConfirming.value && confirmDialogCleanups.length > 0) {
+        const cleanup = confirmDialogCleanups.pop();
+        cleanup?.();
+      }
+    };
+
+    // Watch for confirmation state changes
+    state.isConfirming.subscribe(() => {
+      updateConfirmDialog();
+    });
+
+    // Initial check
+    updateConfirmDialog();
+
     // Set up auto-refresh every 5 seconds
     const REFRESH_INTERVAL_MS = 5000;
     const refreshInterval = setInterval(() => {
@@ -595,6 +621,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     // Clean up TUI
     findInputCleanups.pop()?.();
     threadInputCleanups.pop()?.();
+    confirmDialogCleanups.pop()?.();
     cleanupStatusBar();
     threadTabCleanups.forEach(cleanup => cleanup());
     bugsTabCleanups.forEach(cleanup => cleanup());
@@ -645,6 +672,12 @@ function handlePaneKeyPress(
       if (event.key === "p") {
         const thread = state.selectedThread.value;
         if (thread) actions.toggleThreadPause(thread);
+      }
+
+      // Merge thread
+      if (event.key === "m") {
+        const thread = state.selectedThread.value;
+        if (thread) actions.mergeThread(thread);
       }
       break;
 
