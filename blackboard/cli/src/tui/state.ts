@@ -131,6 +131,11 @@ export interface TuiState {
   isCreatingThread: Signal<boolean>;
   newThreadName: Signal<string>;
 
+  // Confirmation dialog state
+  isConfirming: Signal<boolean>;
+  confirmMessage: Signal<string>;
+  confirmAction: Signal<(() => void) | null>;
+
   // Find/search state
   findState: Signal<FindState>;
 }
@@ -141,6 +146,49 @@ export interface TuiState {
  */
 function relativeTime(dateStr: string): string {
   return relativeTimeUtil(dateStr);
+}
+
+/**
+ * Gets the current git branch.
+ */
+function getCurrentGitBranch(): string | null {
+  try {
+    const command = new Deno.Command("git", {
+      args: ["rev-parse", "--abbrev-ref", "HEAD"],
+      stdout: "piped",
+      stderr: "null",
+    });
+    const result = command.outputSync();
+    if (result.success) {
+      return new TextDecoder().decode(result.stdout).trim();
+    }
+  } catch {
+    // Not in a git repo or git not available
+  }
+  return null;
+}
+
+/**
+ * Merges a git branch into the current branch.
+ * Returns null on success, or an error message on failure.
+ */
+function mergeGitBranch(branchName: string): string | null {
+  try {
+    const command = new Deno.Command("git", {
+      args: ["merge", branchName, "--no-edit"],
+      stdout: "piped",
+      stderr: "piped",
+    });
+    const result = command.outputSync();
+    if (result.success) {
+      return null;
+    } else {
+      const stderr = new TextDecoder().decode(result.stderr).trim();
+      return stderr || "Merge failed";
+    }
+  } catch (err) {
+    return err instanceof Error ? err.message : "Merge failed";
+  }
 }
 
 /**
@@ -181,6 +229,11 @@ export function createTuiState(): TuiState {
   // Thread creation state
   const isCreatingThread = new Signal<boolean>(false);
   const newThreadName = new Signal<string>("");
+
+  // Confirmation dialog state
+  const isConfirming = new Signal<boolean>(false);
+  const confirmMessage = new Signal<string>("");
+  const confirmAction = new Signal<(() => void) | null>(null);
 
   // Find/search state
   const findState = new Signal<FindState>({
@@ -318,6 +371,9 @@ export function createTuiState(): TuiState {
     statusMessage,
     isCreatingThread,
     newThreadName,
+    isConfirming,
+    confirmMessage,
+    confirmAction,
     findState,
   };
 }
@@ -351,12 +407,18 @@ export interface TuiActions {
   // Thread operations
   archiveThread: (thread: Thread) => void;
   toggleThreadPause: (thread: Thread) => void;
+  mergeThread: (thread: Thread) => void;
 
   // Thread creation
   startCreateThread: () => void;
   updateNewThreadName: (name: string) => void;
   confirmCreateThread: () => void;
   cancelCreateThread: () => void;
+
+  // Confirmation dialog
+  showConfirmation: (message: string, onConfirm: () => void) => void;
+  confirmDialogYes: () => void;
+  confirmDialogNo: () => void;
 
   // Worker operations
   loadWorkers: () => void;
@@ -622,6 +684,61 @@ export function createTuiActions(state: TuiState): TuiActions {
       );
     },
 
+    mergeThread(thread: Thread) {
+      // Check if thread has active workers
+      const threadWorkers = state.workers.value.filter(
+        w => w.thread_id === thread.id && w.status === 'running'
+      );
+
+      if (threadWorkers.length > 0) {
+        this.setStatusMessage(`Cannot merge: ${threadWorkers.length} active worker(s)`);
+        return;
+      }
+
+      // Get thread's git branches
+      if (!thread.git_branches) {
+        this.setStatusMessage("Thread has no associated git branch");
+        return;
+      }
+
+      const branches = thread.git_branches.split(",").map(b => b.trim()).filter(b => b);
+      if (branches.length === 0) {
+        this.setStatusMessage("Thread has no associated git branch");
+        return;
+      }
+
+      // Use the last branch (most recent)
+      const threadBranch = branches[branches.length - 1];
+
+      // Get current branch
+      const currentBranch = getCurrentGitBranch();
+      if (!currentBranch) {
+        this.setStatusMessage("Failed to get current git branch");
+        return;
+      }
+
+      if (currentBranch === threadBranch) {
+        this.setStatusMessage("Already on thread branch - switch to target branch first");
+        return;
+      }
+
+      // Show confirmation dialog
+      const message = `Merge "${threadBranch}" into "${currentBranch}" and archive thread?`;
+      this.showConfirmation(message, () => {
+        // Perform the merge
+        const error = mergeGitBranch(threadBranch);
+        if (error) {
+          this.setStatusMessage(`Merge failed: ${error.slice(0, 50)}`);
+          return;
+        }
+
+        // Archive the thread after successful merge
+        updateThread(thread.id, { status: "archived" });
+        this.loadThreads();
+        this.setStatusMessage(`Merged "${threadBranch}" into "${currentBranch}" and archived thread`);
+      });
+    },
+
     startCreateThread() {
       state.isCreatingThread.value = true;
       state.newThreadName.value = "";
@@ -666,6 +783,29 @@ export function createTuiActions(state: TuiState): TuiActions {
     cancelCreateThread() {
       state.isCreatingThread.value = false;
       state.newThreadName.value = "";
+    },
+
+    showConfirmation(message: string, onConfirm: () => void) {
+      state.confirmMessage.value = message;
+      state.confirmAction.value = onConfirm;
+      state.isConfirming.value = true;
+    },
+
+    confirmDialogYes() {
+      const action = state.confirmAction.value;
+      state.isConfirming.value = false;
+      state.confirmMessage.value = "";
+      state.confirmAction.value = null;
+      if (action) {
+        action();
+      }
+    },
+
+    confirmDialogNo() {
+      state.isConfirming.value = false;
+      state.confirmMessage.value = "";
+      state.confirmAction.value = null;
+      this.setStatusMessage("Cancelled");
     },
 
     loadWorkers() {
