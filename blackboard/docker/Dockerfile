@@ -19,6 +19,10 @@ COPY blackboard/schema.sql /app/schema.sql
 COPY blackboard/docker/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
+# Set up .claude directory structure with subagent definitions
+RUN mkdir -p /app/claude-config/agents
+COPY blackboard/agents/implementer.md /app/claude-config/agents/implementer.md
+
 # Create non-root worker user (Claude CLI rejects --dangerously-skip-permissions as root)
 RUN useradd -m -s /bin/bash worker && \
     mkdir -p /app/repo /app/db /app/work && \
