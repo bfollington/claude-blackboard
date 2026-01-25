@@ -21,3 +21,4 @@ export { killCommand } from "./kill.ts";
 export { spawnCommand } from "./spawn.ts";
 export { drainCommand } from "./drain.ts";
 export { farmCommand } from "./farm.ts";
+export { dashboardCommand } from "./dashboard.ts";

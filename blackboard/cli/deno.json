@@ -9,7 +9,7 @@
   "imports": {
     "@cliffy/command": "jsr:@cliffy/command@^1.0.0-rc.7",
     "@db/sqlite": "jsr:@db/sqlite@^0.12",
-    "@tui/tui": "jsr:@tui/tui@^2.1.11",
-    "@tui/crayon": "jsr:@crayon/crayon@^4.0.0"
+    "tui/": "https://deno.land/x/tui@2.1.11/",
+    "crayon": "https://deno.land/x/crayon@3.3.3/mod.ts"
   }
 }
