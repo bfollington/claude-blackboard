@@ -46,6 +46,11 @@ cd "$WORK_DIR"
 # Check out or create the thread branch
 git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH"
 
+# Set up .claude directory with subagent definitions
+# This makes the implementer subagent available to Claude inside the container
+mkdir -p "$WORK_DIR/.claude/agents"
+cp -r /app/claude-config/agents/* "$WORK_DIR/.claude/agents/" 2>/dev/null || true
+
 # Main Ralph Wiggum loop
 while [ $iteration -lt $MAX_ITERATIONS ]; do
   iteration=$((iteration + 1))
@@ -63,31 +68,61 @@ while [ $iteration -lt $MAX_ITERATIONS ]; do
 ## Current Context
 ${CONTEXT}
 
+## Strategic Context Management
+
+Your context window is precious. Use subagents strategically to:
+- **Parallelize independent work**: Launch multiple Task tools in a single message for independent steps
+- **Conserve your context**: Delegate implementation to subagents even for small tasks
+- **Track progress granularly**: Record one breadcrumb per subagent (roughly 1:1 ratio)
+
+You have access to the \`implementer\` subagent (see .claude/agents/implementer.md):
+\`\`\`
+Task tool with subagent_type: \"implementer\"
+Prompt: \"Implement step X: <description>. plan_id='<plan_id>' step_id='<step_id>'\"
+\`\`\`
+
+### Parallelization Strategy
+- Identify steps that can run in parallel (no dependencies between them)
+- Launch them together in a SINGLE message with multiple Task tool calls
+- Example: If steps 2, 3, and 4 are independent, spawn 3 implementer subagents at once
+- Wait for all to complete, then check breadcrumbs and move to next batch
+
 ## Your Workflow
 
-Work on the next pending step(s). As you work:
+Work on pending steps using subagents. For each iteration:
 
-### 1. Record Progress with Breadcrumbs (REQUIRED - USE FREQUENTLY!)
-Record breadcrumbs liberally throughout your work - after each significant action:
+### 1. Plan Your Batch
+Review pending steps and identify which can be parallelized:
 \`\`\`bash
-blackboard --db ${DB_PATH} crumb \"<what you did>\" --agent worker --files \"<files touched>\"
+blackboard --db ${DB_PATH} query \"SELECT id, step_order, description, status FROM plan_steps WHERE plan_id='<plan_id>' ORDER BY step_order\"
 \`\`\`
-Examples of when to record breadcrumbs:
-- After exploring/reading code to understand the system
-- After making a decision about implementation approach
-- After completing each file modification
-- After running tests or builds
-- When discovering important insights
 
-Breadcrumbs create a detailed audit trail that helps track progress and aids debugging.
+### 2. Check Recent Progress
+Before spawning subagents, review what's been done:
+\`\`\`bash
+blackboard --db ${DB_PATH} query \"SELECT summary, issues, next_context FROM breadcrumbs WHERE plan_id='<plan_id>' ORDER BY created_at DESC LIMIT 5\"
+\`\`\`
 
-### 2. Update Step Status
-When completing a step:
+### 3. Spawn Subagents
+Launch Task tools with implementer subagent for each step in your batch:
+- Pass plan_id and step_id explicitly in the prompt
+- For independent steps, launch multiple in ONE message (parallel execution)
+- For dependent steps, launch sequentially and wait for completion
+
+### 4. Record Breadcrumb After Each Subagent
+After EACH subagent completes, record what it did:
+\`\`\`bash
+blackboard --db ${DB_PATH} crumb \"<summary of what subagent accomplished>\" --agent worker --files \"<files touched>\"
+\`\`\`
+Maintain roughly 1:1 ratio: one breadcrumb per subagent spawned.
+
+### 5. Update Step Status
+When a subagent completes its step:
 \`\`\`bash
 blackboard --db ${DB_PATH} query \"UPDATE plan_steps SET status = 'completed' WHERE id = '<step_id>'\"
 \`\`\`
 
-### 3. Update the Plan if Needed
+### 6. Update Plan If Needed
 If you discover the plan needs adjustment (new steps, scope changes, blockers):
 \`\`\`bash
 # Write updated plan to a temp file, then:
@@ -98,18 +133,17 @@ If the plan has no steps yet and you're doing initial research/planning, add the
 # Add new steps by inserting directly into plan_steps table:
 blackboard --db ${DB_PATH} query "INSERT INTO plan_steps (id, plan_id, step_order, description) VALUES ('step-' || hex(randomblob(4)), '<plan_id>', <order>, '<description>')"
 \`\`\`
-Keeping the plan accurate helps future iterations and other workers.
 
-### 4. Commit Your Changes (if applicable)
-If you modified any files, commit them:
+### 7. Commit Changes (if applicable)
+If subagents modified files, commit them:
 \`\`\`bash
 git add <files>
 git commit -m \"[${THREAD_NAME}] <description>\" --no-verify
 \`\`\`
-For plan-only work (research, writing plan steps, etc.), you may not need to commit anything - that's OK!
+For plan-only work (research, planning), you may not need commits - that's OK!
 
-### 5. Report Blockers
-If you hit a blocker that prevents progress:
+### 8. Report Blockers
+If you hit a blocker:
 \`\`\`bash
 blackboard --db ${DB_PATH} bug-report \"<title>\" --steps \"<repro steps>\" --thread ${THREAD_NAME}
 \`\`\`
