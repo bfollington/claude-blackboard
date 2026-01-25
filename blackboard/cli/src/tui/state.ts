@@ -268,6 +268,24 @@ export function createTuiActions(state: TuiState): TuiActions {
     "archived",
   ];
 
+  // Helper function to jump to a match by directly manipulating state
+  const jumpToMatch = (matchIndex: number, matches: FindMatch[], pane: PaneId) => {
+    if (matchIndex < 0 || matchIndex >= matches.length) return;
+
+    const match = matches[matchIndex];
+
+    // Update selection based on focused pane
+    if (pane === "steps") {
+      state.selectedStepIndex.value = match.lineIndex;
+    } else if (pane === "crumbs") {
+      state.selectedCrumbIndex.value = match.lineIndex;
+    } else if (pane === "list") {
+      state.selectedThreadIndex.value = match.lineIndex;
+    }
+    // For "plan" pane, we can't jump to a specific line easily,
+    // but the match highlighting will show it
+  };
+
   return {
     loadThreads() {
       state.isLoading.value = true;
@@ -532,7 +550,7 @@ export function createTuiActions(state: TuiState): TuiActions {
 
       // Jump to first match
       if (matches.length > 0) {
-        this._jumpToMatch(0);
+        jumpToMatch(0, matches, state.focusedPane.value);
       }
     },
 
@@ -545,7 +563,7 @@ export function createTuiActions(state: TuiState): TuiActions {
         ...currentFind,
         currentMatchIndex: nextIndex,
       };
-      this._jumpToMatch(nextIndex);
+      jumpToMatch(nextIndex, currentFind.matches, state.focusedPane.value);
     },
 
     findPrevious() {
@@ -559,7 +577,7 @@ export function createTuiActions(state: TuiState): TuiActions {
         ...currentFind,
         currentMatchIndex: prevIndex,
       };
-      this._jumpToMatch(prevIndex);
+      jumpToMatch(prevIndex, currentFind.matches, state.focusedPane.value);
     },
 
     exitFind() {
@@ -569,25 +587,6 @@ export function createTuiActions(state: TuiState): TuiActions {
         matches: [],
         currentMatchIndex: -1,
       };
-    },
-
-    _jumpToMatch(matchIndex: number) {
-      const currentFind = state.findState.value;
-      if (matchIndex < 0 || matchIndex >= currentFind.matches.length) return;
-
-      const match = currentFind.matches[matchIndex];
-      const focusedPane = state.focusedPane.value;
-
-      // Update selection based on focused pane
-      if (focusedPane === "steps") {
-        this.selectStep(match.lineIndex);
-      } else if (focusedPane === "crumbs") {
-        this.selectCrumb(match.lineIndex);
-      } else if (focusedPane === "list") {
-        this.selectThread(match.lineIndex);
-      }
-      // For "plan" pane, we can't jump to a specific line easily,
-      // but the match highlighting will show it
     },
 
     // Edit operations

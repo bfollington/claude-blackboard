@@ -230,10 +230,10 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     });
 
     // Find input overlay (conditionally rendered based on state)
-    let cleanupFindInput: (() => void) | null = null;
+    const findInputCleanups: Array<() => void> = [];
     const updateFindInput = () => {
-      if (state.findState.value.isActive && cleanupFindInput === null) {
-        cleanupFindInput = createFindInput({
+      if (state.findState.value.isActive && findInputCleanups.length === 0) {
+        const cleanup = createFindInput({
           tui,
           state,
           onQueryChange: (query) => actions.updateFindQuery(query),
@@ -241,14 +241,15 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
           onPrevious: () => actions.findPrevious(),
           onExit: () => actions.exitFind(),
         });
-      } else if (!state.findState.value.isActive && cleanupFindInput !== null) {
-        cleanupFindInput();
-        cleanupFindInput = null;
+        findInputCleanups.push(cleanup);
+      } else if (!state.findState.value.isActive && findInputCleanups.length > 0) {
+        const cleanup = findInputCleanups.pop();
+        cleanup?.();
       }
     };
 
     // Watch for find state changes
-    const findStateUnsubscribe = state.findState.subscribe(() => {
+    state.findState.subscribe(() => {
       updateFindInput();
     });
 
@@ -277,7 +278,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         actions.findNext();
         return;
       }
-      if (!findActive && event.key === "N") {
+      if (!findActive && event.shift && event.key === "n") {
         actions.findPrevious();
         return;
       }
@@ -380,8 +381,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     });
 
     // Clean up TUI
-    findStateUnsubscribe();
-    if (cleanupFindInput) cleanupFindInput();
+    findInputCleanups.pop()?.();
     cleanupStatusBar();
     cleanupDetailPanel();
     cleanupThreadList();
