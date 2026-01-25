@@ -1,0 +1,492 @@
+/**
+ * Reactive state management for the TUI dashboard.
+ * Uses deno_tui signals for automatic UI updates when data changes.
+ */
+
+import { Signal, Computed } from "https://deno.land/x/tui@2.1.11/src/signals/mod.ts";
+import type {
+  Thread,
+  Plan,
+  PlanStep,
+  Breadcrumb,
+  BugReport,
+  ThreadStatus,
+} from "../types/schema.ts";
+import {
+  listThreads,
+  getStepsForPlan,
+  getRecentBreadcrumbs,
+  updateThread,
+  updateStepStatus,
+  replaceStepsForPlan,
+  getPlanById,
+  updatePlanMarkdown,
+  updateStepDescription,
+  updateBreadcrumbSummary,
+} from "../db/queries.ts";
+
+// Tab identifiers for the main navigation
+export type TabId = "threads" | "bugs" | "reflections";
+
+// Pane identifiers for focus management within the threads tab
+export type PaneId = "list" | "plan" | "steps" | "crumbs";
+
+// Status filter for thread list
+export type ThreadFilter = "all" | ThreadStatus;
+
+/**
+ * Thread with computed display data for the list view.
+ */
+export interface ThreadListItem extends Thread {
+  pendingStepsCount: number;
+  lastUpdatedRelative: string;
+}
+
+/**
+ * Core TUI state interface.
+ * All mutable state is wrapped in signals for reactivity.
+ */
+export interface TuiState {
+  // Navigation state
+  activeTab: Signal<TabId>;
+  focusedPane: Signal<PaneId>;
+
+  // Thread list state
+  threads: Signal<Thread[]>;
+  selectedThreadIndex: Signal<number>;
+  threadFilter: Signal<ThreadFilter>;
+
+  // Detail panel state (for selected thread)
+  selectedPlan: Signal<Plan | null>;
+  steps: Signal<PlanStep[]>;
+  breadcrumbs: Signal<Breadcrumb[]>;
+  selectedStepIndex: Signal<number>;
+  selectedCrumbIndex: Signal<number>;
+
+  // Computed values
+  selectedThread: Computed<Thread | null>;
+  filteredThreads: Computed<Thread[]>;
+  threadListItems: Computed<ThreadListItem[]>;
+
+  // UI state
+  shouldQuit: Signal<boolean>;
+  isLoading: Signal<boolean>;
+  statusMessage: Signal<string>;
+}
+
+/**
+ * Create a relative time string from a date.
+ */
+function relativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSecs = Math.floor(diffMs / 1000);
+  const diffMins = Math.floor(diffSecs / 60);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffWeeks = Math.floor(diffDays / 7);
+
+  if (diffSecs < 60) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return `${diffWeeks}w ago`;
+}
+
+/**
+ * Create and initialize the TUI state.
+ * Loads initial data from the database.
+ */
+export function createTuiState(): TuiState {
+  // Navigation state
+  const activeTab = new Signal<TabId>("threads");
+  const focusedPane = new Signal<PaneId>("list");
+
+  // Thread list state
+  const threads = new Signal<Thread[]>([]);
+  const selectedThreadIndex = new Signal<number>(0);
+  const threadFilter = new Signal<ThreadFilter>("all");
+
+  // Detail panel state
+  const selectedPlan = new Signal<Plan | null>(null);
+  const steps = new Signal<PlanStep[]>([]);
+  const breadcrumbs = new Signal<Breadcrumb[]>([]);
+  const selectedStepIndex = new Signal<number>(0);
+  const selectedCrumbIndex = new Signal<number>(0);
+
+  // UI state
+  const shouldQuit = new Signal<boolean>(false);
+  const isLoading = new Signal<boolean>(false);
+  const statusMessage = new Signal<string>("");
+
+  // Computed: filter threads based on current filter
+  const filteredThreads = new Computed<Thread[]>(() => {
+    const filter = threadFilter.value;
+    const allThreads = threads.value;
+    if (filter === "all") {
+      return allThreads;
+    }
+    return allThreads.filter((t) => t.status === filter);
+  });
+
+  // Computed: get currently selected thread
+  const selectedThread = new Computed<Thread | null>(() => {
+    const filtered = filteredThreads.value;
+    const index = selectedThreadIndex.value;
+    if (index >= 0 && index < filtered.length) {
+      return filtered[index];
+    }
+    return null;
+  });
+
+  // Computed: thread list items with display data
+  const threadListItems = new Computed<ThreadListItem[]>(() => {
+    const filtered = filteredThreads.value;
+    return filtered.map((thread) => {
+      // Count pending steps if thread has a plan
+      let pendingStepsCount = 0;
+      if (thread.current_plan_id) {
+        const threadSteps = getStepsForPlan(thread.current_plan_id);
+        pendingStepsCount = threadSteps.filter(
+          (s) => s.status === "pending" || s.status === "in_progress"
+        ).length;
+      }
+      return {
+        ...thread,
+        pendingStepsCount,
+        lastUpdatedRelative: relativeTime(thread.updated_at),
+      };
+    });
+  });
+
+  return {
+    activeTab,
+    focusedPane,
+    threads,
+    selectedThreadIndex,
+    threadFilter,
+    selectedPlan,
+    steps,
+    breadcrumbs,
+    selectedStepIndex,
+    selectedCrumbIndex,
+    selectedThread,
+    filteredThreads,
+    threadListItems,
+    shouldQuit,
+    isLoading,
+    statusMessage,
+  };
+}
+
+/**
+ * Actions for mutating state and syncing with database.
+ */
+export interface TuiActions {
+  // Data loading
+  loadThreads: () => void;
+  loadThreadDetails: (thread: Thread) => void;
+  refreshCurrentThread: () => void;
+
+  // Navigation
+  selectThread: (index: number) => void;
+  moveThreadSelection: (delta: number) => void;
+  cycleThreadFilter: () => void;
+  switchTab: (tab: TabId) => void;
+  cycleFocus: () => void;
+
+  // Step operations
+  selectStep: (index: number) => void;
+  moveStepSelection: (delta: number) => void;
+  toggleStepStatus: (index: number) => void;
+  moveStep: (fromIndex: number, toIndex: number) => void;
+
+  // Breadcrumb operations
+  selectCrumb: (index: number) => void;
+  moveCrumbSelection: (delta: number) => void;
+
+  // Thread operations
+  archiveThread: (thread: Thread) => void;
+  toggleThreadPause: (thread: Thread) => void;
+
+  // UI
+  setStatusMessage: (message: string) => void;
+  quit: () => void;
+
+  // Edit operations (return content for external editor)
+  getPlanMarkdown: () => string | null;
+  savePlanMarkdown: (markdown: string) => void;
+  getStepDescription: (index: number) => string | null;
+  saveStepDescription: (index: number, description: string) => void;
+  getCrumbSummary: (index: number) => string | null;
+  saveCrumbSummary: (index: number, summary: string) => void;
+}
+
+/**
+ * Create actions bound to the given state.
+ */
+export function createTuiActions(state: TuiState): TuiActions {
+  const filterOrder: ThreadFilter[] = [
+    "all",
+    "active",
+    "paused",
+    "completed",
+    "archived",
+  ];
+
+  return {
+    loadThreads() {
+      state.isLoading.value = true;
+      try {
+        const filter = state.threadFilter.value;
+        const threadList =
+          filter === "all" ? listThreads() : listThreads(filter);
+        state.threads.value = threadList;
+
+        // Reset selection if out of bounds
+        if (state.selectedThreadIndex.value >= threadList.length) {
+          state.selectedThreadIndex.value = Math.max(0, threadList.length - 1);
+        }
+
+        // Load details for selected thread
+        const selected = state.selectedThread.value;
+        if (selected) {
+          this.loadThreadDetails(selected);
+        }
+      } finally {
+        state.isLoading.value = false;
+      }
+    },
+
+    loadThreadDetails(thread: Thread) {
+      if (thread.current_plan_id) {
+        state.steps.value = getStepsForPlan(thread.current_plan_id);
+        state.breadcrumbs.value = getRecentBreadcrumbs(
+          thread.current_plan_id,
+          20
+        );
+      } else {
+        state.steps.value = [];
+        state.breadcrumbs.value = [];
+      }
+      // Reset detail selections
+      state.selectedStepIndex.value = 0;
+      state.selectedCrumbIndex.value = 0;
+    },
+
+    refreshCurrentThread() {
+      const thread = state.selectedThread.value;
+      if (thread) {
+        this.loadThreadDetails(thread);
+      }
+    },
+
+    selectThread(index: number) {
+      const filtered = state.filteredThreads.value;
+      if (index >= 0 && index < filtered.length) {
+        state.selectedThreadIndex.value = index;
+        this.loadThreadDetails(filtered[index]);
+      }
+    },
+
+    moveThreadSelection(delta: number) {
+      const filtered = state.filteredThreads.value;
+      const newIndex = state.selectedThreadIndex.value + delta;
+      if (newIndex >= 0 && newIndex < filtered.length) {
+        this.selectThread(newIndex);
+      }
+    },
+
+    cycleThreadFilter() {
+      const currentIndex = filterOrder.indexOf(state.threadFilter.value);
+      const nextIndex = (currentIndex + 1) % filterOrder.length;
+      state.threadFilter.value = filterOrder[nextIndex];
+      state.selectedThreadIndex.value = 0;
+      this.loadThreads();
+    },
+
+    switchTab(tab: TabId) {
+      state.activeTab.value = tab;
+      state.focusedPane.value = "list";
+    },
+
+    cycleFocus() {
+      const paneOrder: PaneId[] = ["list", "plan", "steps", "crumbs"];
+      const currentIndex = paneOrder.indexOf(state.focusedPane.value);
+      const nextIndex = (currentIndex + 1) % paneOrder.length;
+      state.focusedPane.value = paneOrder[nextIndex];
+    },
+
+    selectStep(index: number) {
+      const stepList = state.steps.value;
+      if (index >= 0 && index < stepList.length) {
+        state.selectedStepIndex.value = index;
+      }
+    },
+
+    moveStepSelection(delta: number) {
+      const newIndex = state.selectedStepIndex.value + delta;
+      this.selectStep(newIndex);
+    },
+
+    toggleStepStatus(index: number) {
+      const stepList = state.steps.value;
+      if (index < 0 || index >= stepList.length) return;
+
+      const step = stepList[index];
+      const newStatus =
+        step.status === "completed" ? "pending" : "completed";
+
+      // Update database
+      updateStepStatus(step.id, newStatus);
+
+      // Update local state
+      const updated = [...stepList];
+      updated[index] = { ...step, status: newStatus };
+      state.steps.value = updated;
+
+      this.setStatusMessage(
+        `Step ${newStatus === "completed" ? "completed" : "marked pending"}`
+      );
+    },
+
+    moveStep(fromIndex: number, toIndex: number) {
+      const stepList = state.steps.value;
+      if (
+        fromIndex < 0 ||
+        fromIndex >= stepList.length ||
+        toIndex < 0 ||
+        toIndex >= stepList.length
+      ) {
+        return;
+      }
+
+      const thread = state.selectedThread.value;
+      if (!thread?.current_plan_id) return;
+
+      // Reorder in memory
+      const updated = [...stepList];
+      const [moved] = updated.splice(fromIndex, 1);
+      updated.splice(toIndex, 0, moved);
+
+      // Update step_order values
+      const reordered = updated.map((step, idx) => ({
+        ...step,
+        step_order: idx,
+      }));
+
+      // Persist to database
+      replaceStepsForPlan(
+        thread.current_plan_id,
+        reordered.map((s) => ({
+          step_order: s.step_order,
+          description: s.description,
+          status: s.status,
+        }))
+      );
+
+      // Reload steps to get new IDs
+      state.steps.value = getStepsForPlan(thread.current_plan_id);
+      state.selectedStepIndex.value = toIndex;
+
+      this.setStatusMessage("Step reordered");
+    },
+
+    selectCrumb(index: number) {
+      const crumbList = state.breadcrumbs.value;
+      if (index >= 0 && index < crumbList.length) {
+        state.selectedCrumbIndex.value = index;
+      }
+    },
+
+    moveCrumbSelection(delta: number) {
+      const newIndex = state.selectedCrumbIndex.value + delta;
+      this.selectCrumb(newIndex);
+    },
+
+    archiveThread(thread: Thread) {
+      updateThread(thread.id, { status: "archived" });
+      this.loadThreads();
+      this.setStatusMessage(`Thread "${thread.name}" archived`);
+    },
+
+    toggleThreadPause(thread: Thread) {
+      const newStatus: ThreadStatus =
+        thread.status === "paused" ? "active" : "paused";
+      updateThread(thread.id, { status: newStatus });
+      this.loadThreads();
+      this.setStatusMessage(
+        `Thread "${thread.name}" ${newStatus === "paused" ? "paused" : "resumed"}`
+      );
+    },
+
+    setStatusMessage(message: string) {
+      state.statusMessage.value = message;
+      // Auto-clear after 3 seconds
+      setTimeout(() => {
+        if (state.statusMessage.value === message) {
+          state.statusMessage.value = "";
+        }
+      }, 3000);
+    },
+
+    quit() {
+      state.shouldQuit.value = true;
+    },
+
+    // Edit operations
+    getPlanMarkdown() {
+      const thread = state.selectedThread.value;
+      if (!thread?.current_plan_id) return null;
+      const plan = getPlanById(thread.current_plan_id);
+      return plan?.plan_markdown ?? null;
+    },
+
+    savePlanMarkdown(markdown: string) {
+      const thread = state.selectedThread.value;
+      if (!thread?.current_plan_id) return;
+      updatePlanMarkdown(thread.current_plan_id, markdown);
+      this.setStatusMessage("Plan updated");
+    },
+
+    getStepDescription(index: number) {
+      const steps = state.steps.value;
+      if (index < 0 || index >= steps.length) return null;
+      return steps[index].description;
+    },
+
+    saveStepDescription(index: number, description: string) {
+      const steps = state.steps.value;
+      if (index < 0 || index >= steps.length) return;
+      const step = steps[index];
+      updateStepDescription(step.id, description);
+      // Update local state
+      const updated = [...steps];
+      updated[index] = { ...step, description };
+      state.steps.value = updated;
+      this.setStatusMessage("Step updated");
+    },
+
+    getCrumbSummary(index: number) {
+      const crumbs = state.breadcrumbs.value;
+      if (index < 0 || index >= crumbs.length) return null;
+      return crumbs[index].summary;
+    },
+
+    saveCrumbSummary(index: number, summary: string) {
+      const crumbs = state.breadcrumbs.value;
+      if (index < 0 || index >= crumbs.length) return;
+      const crumb = crumbs[index];
+      updateBreadcrumbSummary(crumb.id, summary);
+      // Update local state
+      const updated = [...crumbs];
+      updated[index] = { ...crumb, summary };
+      state.breadcrumbs.value = updated;
+      this.setStatusMessage("Breadcrumb updated");
+    },
+  };
+}
+
+// Re-export for convenience
+export { Signal, Computed } from "https://deno.land/x/tui@2.1.11/src/signals/mod.ts";
