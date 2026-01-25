@@ -301,6 +301,9 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
         // Format: " abc1234 running [5/50] heartbeat: 10s ago"
         const line = ` ${shortId} ${status} [${iteration}/${maxIter}] heartbeat: ${heartbeat}`;
         workersRows[i].text.value = padLine(line, rectangle.width);
+      } else if (i === workers.length && workers.length > 0 && i < workersRows.length) {
+        // Show hint about viewing logs
+        workersRows[i].text.value = padLine(" Tip: 'blackboard logs <id>' to view worker output", rectangle.width);
       } else {
         workersRows[i].text.value = " ".repeat(rectangle.width);
       }

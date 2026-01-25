@@ -82,6 +82,15 @@ CREATE TABLE IF NOT EXISTS workers (
     max_iterations INTEGER DEFAULT 50
 );
 
+CREATE TABLE IF NOT EXISTS worker_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    worker_id TEXT NOT NULL REFERENCES workers(id) ON DELETE CASCADE,
+    timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+    stream TEXT NOT NULL CHECK(stream IN ('stdout', 'stderr', 'system')),
+    line TEXT NOT NULL,
+    iteration INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS session_state (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
@@ -97,6 +106,8 @@ CREATE INDEX IF NOT EXISTS idx_threads_name ON threads(name);
 CREATE INDEX IF NOT EXISTS idx_plans_thread ON plans(thread_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_workers_status ON workers(status);
 CREATE INDEX IF NOT EXISTS idx_workers_thread ON workers(thread_id);
+CREATE INDEX IF NOT EXISTS idx_worker_logs_worker ON worker_logs(worker_id, timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_worker_logs_timestamp ON worker_logs(timestamp DESC);
 
 CREATE VIEW IF NOT EXISTS active_plan AS
 SELECT * FROM plans 
