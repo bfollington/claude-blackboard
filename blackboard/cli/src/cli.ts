@@ -32,6 +32,7 @@ import {
   spawnCommand,
   drainCommand,
   farmCommand,
+  dashboardCommand,
 } from "./commands/mod.ts";
 
 /**
@@ -153,6 +154,13 @@ export const cli = new Command()
   .command("status", "Show current blackboard status")
   .action(async (options) => {
     await statusCommand(options);
+  })
+  .reset()
+
+  .command("dashboard", "Launch interactive TUI dashboard")
+  .alias("dash")
+  .action(async (options) => {
+    await dashboardCommand(options);
   })
   .reset()
 

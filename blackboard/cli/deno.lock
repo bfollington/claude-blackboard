@@ -97,12 +97,59 @@
       "integrity": "ddb9853b75119a2473857d691cf1ec02ad90793a2e8b4a4ac49d7354281a0cf8"
     }
   },
+  "remote": {
+    "https://deno.land/x/crayon@3.3.3/mod.ts": "82ad225583a483c4837577971629cddaa22614093af8353da6426b9366de9780",
+    "https://deno.land/x/crayon@3.3.3/src/conversions.ts": "9bfd3b1fbe412bcba092890ac558b6beaad4c3aa399cd99d45fadb324d28afd6",
+    "https://deno.land/x/crayon@3.3.3/src/crayon.ts": "6b237baa08a31c903436e040afd2228a7fffaa5d11dddc58e3c402f79b3c1d04",
+    "https://deno.land/x/crayon@3.3.3/src/styles.ts": "aa588b57b2c0482dc5c6f53109b4287831a9827c0aeef9a88129beae1172c1ee",
+    "https://deno.land/x/crayon@3.3.3/src/util.ts": "af8884a917488de76ac0c2b92482093ade74514ece77a4c64e5eb5b0f6ed68e6",
+    "https://deno.land/x/tui@2.1.11/mod.ts": "b32347385f2efc7dd90a9e5f6386fded9bde505e3f1c4b07b8509c77206d15a6",
+    "https://deno.land/x/tui@2.1.11/src/canvas/box.ts": "3f6a41af65942b069795d895c2a73d039a83ba35c01b5236ea88d1de65ba3ebf",
+    "https://deno.land/x/tui@2.1.11/src/canvas/canvas.ts": "31daa080882956f19f5bf8a6b52f7a946ebc34bdba103b007ce4e73c2b922409",
+    "https://deno.land/x/tui@2.1.11/src/canvas/draw_object.ts": "2b8a48f10c343aee61d9dc7f00ea7917119ea41374a994e1db7b5b1ee188f0f8",
+    "https://deno.land/x/tui@2.1.11/src/canvas/mod.ts": "9da429bfb1d4f53eed661c3e2a2ae4b610380526597aa5f35a6604b810a83ac7",
+    "https://deno.land/x/tui@2.1.11/src/canvas/text.ts": "e6c0f5ecb985a037e55397810bc212bae206240acd3e2b15fb786ae2746abdea",
+    "https://deno.land/x/tui@2.1.11/src/component.ts": "d7a35cd1a4bc8a6177b047595c86e1df3418b340701e343ee83a08ac7a8005de",
+    "https://deno.land/x/tui@2.1.11/src/controls.ts": "e0e91f61a8a73fb044ce980fd3d070407c2f950635cbce73d97f060ef19a780e",
+    "https://deno.land/x/tui@2.1.11/src/event_emitter.ts": "e4ee1de2037c89952c5c4c54dc336b7992024f0cb41c9e49229944e773386824",
+    "https://deno.land/x/tui@2.1.11/src/input.ts": "4ddc4049718847b2f76c2d022b740694ed50f958c2c42bb3a2eacfe0b0d83b0d",
+    "https://deno.land/x/tui@2.1.11/src/input_reader/decoders/keyboard.ts": "70d4f54605a650612601e654bc28a5d4260374a893e27b8a86fe7181cb626377",
+    "https://deno.land/x/tui@2.1.11/src/input_reader/decoders/mouse.ts": "a119c6261a27fb9b5e1711ba3d5161c45eac5615ea0aa739e4e6bca759434e6e",
+    "https://deno.land/x/tui@2.1.11/src/input_reader/mod.ts": "4213a920c69fd51badd1091fe7c61eff1bd1ead32659785c16f976ae377491cc",
+    "https://deno.land/x/tui@2.1.11/src/input_reader/types.ts": "c940a6d656b2fbdc051c2e0508f8eeefa322dd16e60fc6a3bac8d1e9337f7d6c",
+    "https://deno.land/x/tui@2.1.11/src/layout/errors.ts": "3df98a8f7747657fd252f602b26e9b5ee130dbfb236bcb4b2d2c912d7ae1eef9",
+    "https://deno.land/x/tui@2.1.11/src/layout/grid_layout.ts": "7b2fca94d1a074c61d838c36800dca47f518f720c6539a33d0ad674081a29a76",
+    "https://deno.land/x/tui@2.1.11/src/layout/horizontal_layout.ts": "e2ea27519c44c124cb228f19d4b14aa314e7db2cc92ef83fccfa146ced29d4e4",
+    "https://deno.land/x/tui@2.1.11/src/layout/mod.ts": "65381a8dd7e8f6287742ebeffef866ae98932d16daf3ea3325f0180b37e327b8",
+    "https://deno.land/x/tui@2.1.11/src/layout/types.ts": "ebc78ef4adbf802a49f5319474d81183a2b9edc2947443d9f40f23c4730e16f3",
+    "https://deno.land/x/tui@2.1.11/src/layout/vertical_layout.ts": "41f1ec4b897a0f45478b6392f0c74d0c010a74693b99f36f532c85d5525dfca0",
+    "https://deno.land/x/tui@2.1.11/src/signals/computed.ts": "824428cfda7c9e4a6aed8caee32a9aa62cd257fac9e7ca64d54c99a15ea56019",
+    "https://deno.land/x/tui@2.1.11/src/signals/dependency_tracking.ts": "b89e933a912e8c32881e13ba1555201ec22cc0be69600862ff824f72f1bd6d55",
+    "https://deno.land/x/tui@2.1.11/src/signals/effect.ts": "b478ca6469a151e93970679108e01a786b6e121023294d15b7293476161ec049",
+    "https://deno.land/x/tui@2.1.11/src/signals/flusher.ts": "b47eeca9547a39487bef56ab82272f050883474995d5e92191296aec936180cb",
+    "https://deno.land/x/tui@2.1.11/src/signals/lazy_computed.ts": "b4653efd855ce920657510b4cd086c58a8c72be6511465e3234f4e0b134bb9c6",
+    "https://deno.land/x/tui@2.1.11/src/signals/lazy_effect.ts": "b8bdebf29d4b5ae204bc8c0300f03d9c60ff097aef28e0df6515665497b919f0",
+    "https://deno.land/x/tui@2.1.11/src/signals/mod.ts": "e76b1303c74c257956d29f9169f3f12af410a0e8540c7a467e5405ba839cc431",
+    "https://deno.land/x/tui@2.1.11/src/signals/reactivity.ts": "8520655a0b948d979b1b3450139695726c1dfeb46b46d49b8e4159fe4651368d",
+    "https://deno.land/x/tui@2.1.11/src/signals/signal.ts": "5f351000a3316196ac3836fd9f3ef2a708aec85713df720a01c853d4859060be",
+    "https://deno.land/x/tui@2.1.11/src/signals/types.ts": "e04d088a849a58d184c30420fec9ab3726985e3bcbe2cdc1b4bbc218fb299dbe",
+    "https://deno.land/x/tui@2.1.11/src/theme.ts": "87f3da7e6a5bbbeb04c3c5384069225c244bcce0bac833a87828c5208af07cfc",
+    "https://deno.land/x/tui@2.1.11/src/tui.ts": "9b9bb4da296e96aadbe846520446d76570cf6105dcbc3c59e26a4301b4c6d2f4",
+    "https://deno.land/x/tui@2.1.11/src/types.ts": "7e39e8c59a1d28e379e54455dd7d7bb1a349191970d9af8d47a74b590e0de401",
+    "https://deno.land/x/tui@2.1.11/src/utils/ansi_codes.ts": "be83f249ab09d33b64540adda5191c58580d386cc7627b8d10ea3363c9a6d23d",
+    "https://deno.land/x/tui@2.1.11/src/utils/async.ts": "3f3bfe526c05467313237c434bc951a02344935dba61fe7b4e14d818d03ba1ca",
+    "https://deno.land/x/tui@2.1.11/src/utils/component.ts": "a7f5396b480c7ed437c5e08ec56c3e5c85a55963ee8520c2e5cc7a185577f1a3",
+    "https://deno.land/x/tui@2.1.11/src/utils/mod.ts": "4daef102e2406625f32faf08d238b702a26b3dc87232c35e97a215b9dbf9e781",
+    "https://deno.land/x/tui@2.1.11/src/utils/numbers.ts": "9d4322b7a184e111184f37507ccdf0d4a29ee7eb8f2ce8f942f078bd165f8941",
+    "https://deno.land/x/tui@2.1.11/src/utils/signals.ts": "a78893aa2e379468df65045a4d1f45e0111237b24e18c19bf5a92b6ee9074c4a",
+    "https://deno.land/x/tui@2.1.11/src/utils/sorted_array.ts": "d7b55e9c6489102fbee46d632040449f960f2ed3ae0d6bc3326e6d6ec1450d97",
+    "https://deno.land/x/tui@2.1.11/src/utils/strings.ts": "0f7d24072e3d2ed4993f0f2692f148b0af4d9b7a665193dec835101af4dabf7b",
+    "https://deno.land/x/tui@2.1.11/src/view.ts": "77c9dfdb3632f95c2456036c5e30f90cfbbad62cbb4f370cba48b992523aa619"
+  },
   "workspace": {
     "dependencies": [
       "jsr:@cliffy/command@^1.0.0-rc.7",
-      "jsr:@crayon/crayon@4",
-      "jsr:@db/sqlite@0.12",
-      "jsr:@tui/tui@^2.1.11"
+      "jsr:@db/sqlite@0.12"
     ]
   }
 }
