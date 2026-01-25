@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-ffi
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-ffi --allow-run
 
 /**
  * Blackboard CLI - Deno-based replacement for bash scripts
