@@ -111,11 +111,50 @@ export async function isDockerAvailable(): Promise<boolean> {
 }
 
 /**
+ * Resolve the Dockerfile to use for building the worker image.
+ * Priority order:
+ * 1. Dockerfile.worker in project root (user override)
+ * 2. blackboard/docker/Dockerfile (plugin-bundled template)
+ * 3. null if neither exists (caller should use minimal fallback)
+ *
+ * @param projectRoot Root directory of the project (usually cwd)
+ * @param pluginRoot Root directory where blackboard/ lives
+ * @returns Path to Dockerfile or null
+ */
+export async function resolveDockerfile(
+  projectRoot: string,
+  pluginRoot: string
+): Promise<string | null> {
+  // Check project root for Dockerfile.worker
+  const projectDockerfile = `${projectRoot}/Dockerfile.worker`;
+  try {
+    await Deno.stat(projectDockerfile);
+    return projectDockerfile;
+  } catch {
+    // Not found, continue
+  }
+
+  // Check plugin root for blackboard/docker/Dockerfile
+  const pluginDockerfile = `${pluginRoot}/blackboard/docker/Dockerfile`;
+  try {
+    await Deno.stat(pluginDockerfile);
+    return pluginDockerfile;
+  } catch {
+    // Not found
+  }
+
+  return null;
+}
+
+/**
  * Build the worker image.
  * @throws Error if build fails
  */
-export async function dockerBuild(tag: string, contextPath: string): Promise<void> {
-  const dockerfilePath = `${contextPath}/blackboard/docker/Dockerfile`;
+export async function dockerBuild(
+  tag: string,
+  contextPath: string,
+  dockerfilePath: string
+): Promise<void> {
   const result = await runDocker([
     "build",
     "-t",

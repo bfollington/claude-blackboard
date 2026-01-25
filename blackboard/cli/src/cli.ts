@@ -40,6 +40,7 @@ import {
   stepUpdateCommand,
   stepRemoveCommand,
   stepReorderCommand,
+  initWorkerCommand,
 } from "./commands/mod.ts";
 
 /**
@@ -361,6 +362,13 @@ export const cli = new Command()
   .option("--build", "Build worker image before starting")
   .action(async (options) => {
     await farmCommand(options);
+  })
+  .reset()
+
+  .command("init-worker", "Create a project-specific Dockerfile.worker template")
+  .option("--force", "Overwrite existing Dockerfile.worker")
+  .action(async (options) => {
+    await initWorkerCommand(options);
   })
   .reset()
 

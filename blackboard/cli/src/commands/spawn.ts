@@ -10,6 +10,7 @@ import {
   isDockerAvailable,
   dockerBuild,
   dockerRun,
+  resolveDockerfile,
   type ContainerOptions,
 } from "../docker/client.ts";
 import { generateId } from "../utils/id.ts";
@@ -77,10 +78,32 @@ export async function spawnCommand(
     // Find the plugin root (where blackboard/ directory lives)
     const pluginRoot = Deno.env.get("CLAUDE_PLUGIN_ROOT") ||
       join(dirname(fromFileUrl(import.meta.url)), "..", "..", "..", "..");
+
+    // Resolve project root (usually cwd, or from --repo flag)
+    const projectRoot = options.repo || Deno.cwd();
+
+    // Resolve which Dockerfile to use
+    const dockerfilePath = await resolveDockerfile(projectRoot, pluginRoot);
+
+    if (!dockerfilePath) {
+      console.error(
+        "Error: No Dockerfile found. Expected either:"
+      );
+      console.error(`  - ${projectRoot}/Dockerfile.worker (project-specific)`);
+      console.error(`  - ${pluginRoot}/blackboard/docker/Dockerfile (plugin default)`);
+      console.error("\nRun 'blackboard init-worker' to create a project-specific Dockerfile.");
+      Deno.exit(1);
+    }
+
+    if (!options.quiet) {
+      console.log(`Using Dockerfile: ${dockerfilePath}`);
+    }
+
+    // Context path is the plugin root (contains blackboard/ directory)
     const contextPath = pluginRoot;
 
     try {
-      await dockerBuild(imageName, contextPath);
+      await dockerBuild(imageName, contextPath, dockerfilePath);
       if (!options.quiet) {
         console.log(`Build complete: ${imageName}`);
       }
