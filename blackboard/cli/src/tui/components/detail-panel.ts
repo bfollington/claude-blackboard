@@ -216,6 +216,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
     const steps = state.steps.value;
     const selectedIndex = state.selectedStepIndex.value;
     const isFocused = state.focusedPane.value === "steps";
+    const findState = state.findState.value;
 
     const countStr = steps.length > 0 ? ` (${steps.length})` : "";
     stepsHeaderText.value = isFocused ? `>> STEPS${countStr} <<` : ` STEPS${countStr} `;
@@ -238,7 +239,21 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
       if (i < steps.length) {
         const step = steps[i];
         const isSelected = i === selectedIndex;
-        stepsRows[i].text.value = formatStepRow(step, isSelected, isFocused, rectangle.width);
+
+        // Check if this line has the current match
+        const currentMatch = findState.isActive &&
+          findState.currentMatchIndex >= 0 &&
+          findState.matches[findState.currentMatchIndex]?.lineIndex === i &&
+          state.focusedPane.value === "steps";
+
+        stepsRows[i].text.value = formatStepRow(
+          step,
+          isSelected,
+          isFocused,
+          rectangle.width,
+          findState.query,
+          currentMatch
+        );
       } else {
         stepsRows[i].text.value = " ".repeat(rectangle.width);
       }
@@ -249,6 +264,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
     const crumbs = state.breadcrumbs.value;
     const selectedIndex = state.selectedCrumbIndex.value;
     const isFocused = state.focusedPane.value === "crumbs";
+    const findState = state.findState.value;
 
     const countStr = crumbs.length > 0 ? ` (${crumbs.length})` : "";
     crumbsHeaderText.value = isFocused ? `>> CRUMBS${countStr} <<` : ` CRUMBS${countStr} `;
@@ -272,13 +288,31 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
       const crumb = crumbs[i];
       const isSelected = i === selectedIndex;
 
+      // Check if this line has the current match
+      const currentMatch = findState.isActive &&
+        findState.currentMatchIndex >= 0 &&
+        findState.matches[findState.currentMatchIndex]?.lineIndex === i &&
+        state.focusedPane.value === "crumbs";
+
       // Header line with selection indicator
-      crumbsRows[rowIndex].text.value = formatCrumbHeader(crumb, isSelected, isFocused, rectangle.width);
+      crumbsRows[rowIndex].text.value = formatCrumbHeader(
+        crumb,
+        isSelected,
+        isFocused,
+        rectangle.width,
+        findState.query,
+        currentMatch
+      );
       rowIndex++;
 
       // Summary line
       if (rowIndex < crumbsRows.length) {
-        crumbsRows[rowIndex].text.value = formatCrumbSummary(crumb, rectangle.width);
+        crumbsRows[rowIndex].text.value = formatCrumbSummary(
+          crumb,
+          rectangle.width,
+          findState.query,
+          currentMatch
+        );
         rowIndex++;
       }
     }
@@ -300,6 +334,9 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   state.breadcrumbs.subscribe(updateCrumbsSection);
   state.selectedStepIndex.subscribe(updateStepsSection);
   state.selectedCrumbIndex.subscribe(updateCrumbsSection);
+  state.findState.subscribe(updatePlanSection);
+  state.findState.subscribe(updateStepsSection);
+  state.findState.subscribe(updateCrumbsSection);
 
   // Initial render
   updatePlanSection();
@@ -325,53 +362,122 @@ function padLine(text: string, width: number): string {
 }
 
 /**
- * Format a step row with icon and description (PLAIN TEXT).
+ * Highlight matches in text using reverse video.
+ */
+function highlightMatches(
+  text: string,
+  query: string,
+  isCurrent: boolean
+): string {
+  if (!query) return text;
+
+  const lowerText = text.toLowerCase();
+  const lowerQuery = query.toLowerCase();
+  const parts: string[] = [];
+  let lastIndex = 0;
+
+  let matchIndex = lowerText.indexOf(lowerQuery);
+  while (matchIndex !== -1) {
+    // Add text before match
+    if (matchIndex > lastIndex) {
+      parts.push(text.slice(lastIndex, matchIndex));
+    }
+
+    // Add highlighted match
+    const matchedText = text.slice(matchIndex, matchIndex + query.length);
+    if (isCurrent) {
+      // Current match: yellow background
+      parts.push(crayon.bgYellow.black(matchedText));
+    } else {
+      // Other matches: reverse video
+      parts.push(crayon.inverse(matchedText));
+    }
+
+    lastIndex = matchIndex + query.length;
+    matchIndex = lowerText.indexOf(lowerQuery, lastIndex);
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.join("");
+}
+
+/**
+ * Format a step row with icon and description (with optional highlighting).
  */
 function formatStepRow(
   step: PlanStep,
   isSelected: boolean,
   isFocused: boolean,
-  width: number
+  width: number,
+  query: string = "",
+  isCurrent: boolean = false
 ): string {
   const icon = STEP_ICONS[step.status] || "[?]";
   const selectionIndicator = isSelected ? (isFocused ? ">" : "*") : " ";
 
   // Truncate description to fit
   const maxDescLen = width - 7; // selection + icon (3) + spaces (3)
-  const desc = step.description.length > maxDescLen
+  let desc = step.description.length > maxDescLen
     ? step.description.slice(0, maxDescLen - 1) + "~"
     : step.description;
+
+  // Apply highlighting if query exists
+  if (query) {
+    desc = highlightMatches(desc, query, isCurrent);
+  }
 
   const line = `${selectionIndicator}${icon} ${desc}`;
   return padLine(line, width);
 }
 
 /**
- * Format crumb header line (PLAIN TEXT).
+ * Format crumb header line (with optional highlighting).
  */
 function formatCrumbHeader(
   crumb: Breadcrumb,
   isSelected: boolean,
   isFocused: boolean,
-  width: number
+  width: number,
+  query: string = "",
+  isCurrent: boolean = false
 ): string {
   const shortId = crumb.id.slice(0, 7);
   const time = relativeTime(crumb.created_at);
   const agent = crumb.agent_type || "unknown";
   const selectionIndicator = isSelected ? (isFocused ? ">" : "*") : " ";
 
-  const line = `${selectionIndicator}${shortId} ${time}  ${agent}`;
+  let line = `${selectionIndicator}${shortId} ${time}  ${agent}`;
+
+  // Apply highlighting if query exists (note: unlikely to match in header)
+  if (query) {
+    line = highlightMatches(line, query, isCurrent);
+  }
+
   return padLine(line, width);
 }
 
 /**
- * Format crumb summary line (PLAIN TEXT).
+ * Format crumb summary line (with optional highlighting).
  */
-function formatCrumbSummary(crumb: Breadcrumb, width: number): string {
+function formatCrumbSummary(
+  crumb: Breadcrumb,
+  width: number,
+  query: string = "",
+  isCurrent: boolean = false
+): string {
   const maxLen = width - 4;
-  const summary = crumb.summary.length > maxLen
+  let summary = crumb.summary.length > maxLen
     ? crumb.summary.slice(0, maxLen - 1) + "~"
     : crumb.summary;
+
+  // Apply highlighting if query exists
+  if (query) {
+    summary = highlightMatches(summary, query, isCurrent);
+  }
 
   const line = ` | ${summary}`;
   return padLine(line, width);
