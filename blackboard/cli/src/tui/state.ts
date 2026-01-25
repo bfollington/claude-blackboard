@@ -34,6 +34,20 @@ export type PaneId = "list" | "plan" | "steps" | "crumbs";
 // Status filter for thread list
 export type ThreadFilter = "all" | ThreadStatus;
 
+// Find/search state
+export interface FindMatch {
+  lineIndex: number;
+  matchIndex: number;
+  matchLength: number;
+}
+
+export interface FindState {
+  isActive: boolean;
+  query: string;
+  matches: FindMatch[];
+  currentMatchIndex: number;
+}
+
 /**
  * Thread with computed display data for the list view.
  */
@@ -72,6 +86,9 @@ export interface TuiState {
   shouldQuit: Signal<boolean>;
   isLoading: Signal<boolean>;
   statusMessage: Signal<string>;
+
+  // Find/search state
+  findState: Signal<FindState>;
 }
 
 /**
@@ -119,6 +136,14 @@ export function createTuiState(): TuiState {
   const shouldQuit = new Signal<boolean>(false);
   const isLoading = new Signal<boolean>(false);
   const statusMessage = new Signal<string>("");
+
+  // Find/search state
+  const findState = new Signal<FindState>({
+    isActive: false,
+    query: "",
+    matches: [],
+    currentMatchIndex: -1,
+  });
 
   // Computed: filter threads based on current filter
   const filteredThreads = new Computed<Thread[]>(() => {
@@ -177,6 +202,7 @@ export function createTuiState(): TuiState {
     shouldQuit,
     isLoading,
     statusMessage,
+    findState,
   };
 }
 
@@ -213,6 +239,13 @@ export interface TuiActions {
   // UI
   setStatusMessage: (message: string) => void;
   quit: () => void;
+
+  // Find operations
+  startFind: () => void;
+  updateFindQuery: (query: string) => void;
+  findNext: () => void;
+  findPrevious: () => void;
+  exitFind: () => void;
 
   // Edit operations (return content for external editor)
   getPlanMarkdown: () => string | null;
@@ -433,6 +466,128 @@ export function createTuiActions(state: TuiState): TuiActions {
 
     quit() {
       state.shouldQuit.value = true;
+    },
+
+    // Find operations
+    startFind() {
+      state.findState.value = {
+        isActive: true,
+        query: "",
+        matches: [],
+        currentMatchIndex: -1,
+      };
+    },
+
+    updateFindQuery(query: string) {
+      const currentFind = state.findState.value;
+      if (!currentFind.isActive) return;
+
+      // Search for matches in the currently visible content
+      const matches: FindMatch[] = [];
+
+      // Determine which content to search based on focused pane
+      let contentLines: string[] = [];
+      const focusedPane = state.focusedPane.value;
+
+      if (focusedPane === "plan") {
+        // Search in plan markdown
+        const planMarkdown = this.getPlanMarkdown();
+        if (planMarkdown) {
+          contentLines = planMarkdown.split("\n");
+        }
+      } else if (focusedPane === "steps") {
+        // Search in step descriptions
+        contentLines = state.steps.value.map((s) => s.description);
+      } else if (focusedPane === "crumbs") {
+        // Search in breadcrumb summaries
+        contentLines = state.breadcrumbs.value.map((c) => c.summary);
+      } else if (focusedPane === "list") {
+        // Search in thread names
+        contentLines = state.filteredThreads.value.map((t) => t.name);
+      }
+
+      // Find all matches (case-insensitive)
+      if (query) {
+        const lowerQuery = query.toLowerCase();
+        contentLines.forEach((line, lineIndex) => {
+          const lowerLine = line.toLowerCase();
+          let matchIndex = 0;
+          while ((matchIndex = lowerLine.indexOf(lowerQuery, matchIndex)) !== -1) {
+            matches.push({
+              lineIndex,
+              matchIndex,
+              matchLength: query.length,
+            });
+            matchIndex += query.length;
+          }
+        });
+      }
+
+      state.findState.value = {
+        isActive: true,
+        query,
+        matches,
+        currentMatchIndex: matches.length > 0 ? 0 : -1,
+      };
+
+      // Jump to first match
+      if (matches.length > 0) {
+        this._jumpToMatch(0);
+      }
+    },
+
+    findNext() {
+      const currentFind = state.findState.value;
+      if (!currentFind.isActive || currentFind.matches.length === 0) return;
+
+      const nextIndex = (currentFind.currentMatchIndex + 1) % currentFind.matches.length;
+      state.findState.value = {
+        ...currentFind,
+        currentMatchIndex: nextIndex,
+      };
+      this._jumpToMatch(nextIndex);
+    },
+
+    findPrevious() {
+      const currentFind = state.findState.value;
+      if (!currentFind.isActive || currentFind.matches.length === 0) return;
+
+      const prevIndex = currentFind.currentMatchIndex - 1 < 0
+        ? currentFind.matches.length - 1
+        : currentFind.currentMatchIndex - 1;
+      state.findState.value = {
+        ...currentFind,
+        currentMatchIndex: prevIndex,
+      };
+      this._jumpToMatch(prevIndex);
+    },
+
+    exitFind() {
+      state.findState.value = {
+        isActive: false,
+        query: "",
+        matches: [],
+        currentMatchIndex: -1,
+      };
+    },
+
+    _jumpToMatch(matchIndex: number) {
+      const currentFind = state.findState.value;
+      if (matchIndex < 0 || matchIndex >= currentFind.matches.length) return;
+
+      const match = currentFind.matches[matchIndex];
+      const focusedPane = state.focusedPane.value;
+
+      // Update selection based on focused pane
+      if (focusedPane === "steps") {
+        this.selectStep(match.lineIndex);
+      } else if (focusedPane === "crumbs") {
+        this.selectCrumb(match.lineIndex);
+      } else if (focusedPane === "list") {
+        this.selectThread(match.lineIndex);
+      }
+      // For "plan" pane, we can't jump to a specific line easily,
+      // but the match highlighting will show it
     },
 
     // Edit operations
