@@ -24,3 +24,10 @@ export { drainCommand } from "./drain.ts";
 export { farmCommand } from "./farm.ts";
 export { dashboardCommand } from "./dashboard.ts";
 export { workCommand } from "./work.ts";
+export {
+  stepListCommand,
+  stepAddCommand,
+  stepUpdateCommand,
+  stepRemoveCommand,
+  stepReorderCommand,
+} from "./step.ts";

@@ -328,6 +328,230 @@ export function updateStepStatus(stepId: string, status: StepStatus): void {
   stmt.run({ stepId, status });
 }
 
+/**
+ * Gets a single step by its ID.
+ *
+ * @param stepId - Step ID
+ * @returns Step or null if not found
+ */
+export function getStepById(stepId: string): PlanStep | null {
+  const db = getDb();
+  const stmt = db.prepare(`
+    SELECT * FROM plan_steps WHERE id = :stepId
+  `);
+  const results = stmt.all({ stepId }) as PlanStep[];
+  return results.length > 0 ? results[0] : null;
+}
+
+/**
+ * Inserts a single step into a plan.
+ * If step_order is not provided, appends at the end of the plan.
+ *
+ * @param planId - Plan ID
+ * @param step - Step details (description, optional status and step_order)
+ * @returns The ID of the newly created step
+ */
+export function insertStep(
+  planId: string,
+  step: { description: string; status?: StepStatus; step_order?: number }
+): string {
+  const db = getDb();
+  const stepId = crypto.randomUUID();
+
+  // If step_order not provided, get max and append at end
+  const stepOrder = step.step_order ?? (getMaxStepOrder(planId) + 1);
+  const status = step.status ?? 'pending';
+
+  const stmt = db.prepare(`
+    INSERT INTO plan_steps (id, plan_id, step_order, description, status)
+    VALUES (:id, :planId, :step_order, :description, :status)
+  `);
+
+  stmt.run({
+    id: stepId,
+    planId,
+    step_order: stepOrder,
+    description: step.description,
+    status,
+  });
+
+  return stepId;
+}
+
+/**
+ * Deletes a single step by its ID.
+ *
+ * @param stepId - Step ID to delete
+ */
+export function deleteStep(stepId: string): void {
+  const db = getDb();
+  const stmt = db.prepare(`
+    DELETE FROM plan_steps WHERE id = :stepId
+  `);
+  stmt.run({ stepId });
+}
+
+/**
+ * Gets the highest step_order value for a plan.
+ * Returns 0 if the plan has no steps.
+ *
+ * @param planId - Plan ID
+ * @returns Maximum step_order value, or 0 if no steps exist
+ */
+export function getMaxStepOrder(planId: string): number {
+  const db = getDb();
+  const stmt = db.prepare(`
+    SELECT COALESCE(MAX(step_order), 0) as max_order
+    FROM plan_steps
+    WHERE plan_id = :planId
+  `);
+  const result = stmt.all({ planId }) as { max_order: number }[];
+  return result[0].max_order;
+}
+
+/**
+ * Normalizes a step description for matching.
+ * Converts to lowercase and normalizes whitespace.
+ *
+ * @param description - Step description
+ * @returns Normalized description
+ */
+function normalizeDescription(description: string): string {
+  return description.toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * Merges incoming steps with existing steps for a plan.
+ * - Matches steps by normalized description (case-insensitive, whitespace-normalized)
+ * - Preserves completed/failed/skipped steps (never removes them)
+ * - Adds new steps from incoming list
+ * - Drops pending steps not in incoming list (Claude removed them intentionally)
+ * - Appends orphaned completed steps at end
+ * - Uses a transaction for atomicity
+ *
+ * @param planId - Plan ID
+ * @param incomingSteps - Array of incoming steps from TodoWrite
+ * @returns Object with counts of added, updated, and preserved steps
+ */
+export function mergeStepsForPlan(
+  planId: string,
+  incomingSteps: Array<{ description: string; status: StepStatus }>
+): { added: number; updated: number; preserved: number } {
+  const db = getDb();
+
+  let added = 0;
+  let updated = 0;
+  let preserved = 0;
+
+  db.exec("BEGIN TRANSACTION");
+
+  try {
+    // Get all existing steps
+    const existingSteps = getStepsForPlan(planId);
+
+    // Create a map of normalized descriptions to existing steps
+    const existingMap = new Map<string, PlanStep>();
+    for (const step of existingSteps) {
+      const normalized = normalizeDescription(step.description);
+      existingMap.set(normalized, step);
+    }
+
+    // Create a map of normalized descriptions from incoming steps
+    const incomingMap = new Map<string, { description: string; status: StepStatus }>();
+    for (const step of incomingSteps) {
+      const normalized = normalizeDescription(step.description);
+      incomingMap.set(normalized, step);
+    }
+
+    // Track which existing steps are matched
+    const matchedStepIds = new Set<string>();
+
+    // Process incoming steps in order
+    const insertStmt = db.prepare(`
+      INSERT INTO plan_steps (id, plan_id, step_order, description, status)
+      VALUES (:id, :planId, :step_order, :description, :status)
+    `);
+
+    const updateStmt = db.prepare(`
+      UPDATE plan_steps
+      SET step_order = :step_order, description = :description, status = :status
+      WHERE id = :id
+    `);
+
+    let order = 1;
+    for (const incomingStep of incomingSteps) {
+      const normalized = normalizeDescription(incomingStep.description);
+      const existing = existingMap.get(normalized);
+
+      if (existing) {
+        // Step exists - update its order and keep its status unless incoming status is different
+        matchedStepIds.add(existing.id);
+
+        // Preserve existing status if it's completed/failed/skipped
+        const statusToUse = ['completed', 'failed', 'skipped'].includes(existing.status)
+          ? existing.status
+          : incomingStep.status;
+
+        updateStmt.run({
+          id: existing.id,
+          step_order: order,
+          description: incomingStep.description, // Use incoming description for freshness
+          status: statusToUse,
+        });
+
+        if (statusToUse === existing.status) {
+          preserved++;
+        } else {
+          updated++;
+        }
+      } else {
+        // New step - insert it
+        insertStmt.run({
+          id: crypto.randomUUID(),
+          planId,
+          step_order: order,
+          description: incomingStep.description,
+          status: incomingStep.status,
+        });
+        added++;
+      }
+      order++;
+    }
+
+    // Handle unmatched existing steps
+    const deleteStmt = db.prepare(`
+      DELETE FROM plan_steps WHERE id = :id
+    `);
+
+    for (const existing of existingSteps) {
+      if (!matchedStepIds.has(existing.id)) {
+        // Step was not in incoming list
+        if (['completed', 'failed', 'skipped'].includes(existing.status)) {
+          // Preserve completed/failed/skipped steps by appending at end
+          updateStmt.run({
+            id: existing.id,
+            step_order: order,
+            description: existing.description,
+            status: existing.status,
+          });
+          order++;
+          preserved++;
+        } else {
+          // Remove pending/in_progress steps not in incoming list
+          deleteStmt.run({ id: existing.id });
+        }
+      }
+    }
+
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+
+  return { added, updated, preserved };
+}
+
 // ============================================================================
 // Breadcrumbs
 // ============================================================================
