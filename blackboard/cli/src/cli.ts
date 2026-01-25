@@ -214,7 +214,7 @@ const hookCommand = new Command()
  */
 export const cli = new Command()
   .name("blackboard")
-  .version("0.3.2")
+  .version("0.3.3")
   .description("SQLite blackboard for Claude Code context sharing")
   .globalOption("-d, --db <path:string>", "Database path", {
     default: resolveDbPath(),
