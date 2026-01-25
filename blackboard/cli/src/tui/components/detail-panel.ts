@@ -185,9 +185,16 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   const updatePlanSection = () => {
     const thread = state.selectedThread.value;
     const isFocused = state.focusedPane.value === "plan";
+    const workers = state.workersForSelectedThread.value;
 
-    // Update header to show focus state
-    planHeaderText.value = isFocused ? ">> PLAN <<" : " PLAN ";
+    // Show worker count in header
+    const workerInfo = workers.length > 0
+      ? ` [${workers.length}w]`
+      : "";
+
+    planHeaderText.value = isFocused
+      ? `>> PLAN${workerInfo} <<`
+      : ` PLAN${workerInfo} `;
 
     if (!thread) {
       if (planRows[0]) planRows[0].text.value = padLine(" Select a thread to view its plan", rectangle.width);
@@ -337,6 +344,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   state.findState.subscribe(updatePlanSection);
   state.findState.subscribe(updateStepsSection);
   state.findState.subscribe(updateCrumbsSection);
+  state.workersForSelectedThread.subscribe(updatePlanSection);
 
   // Initial render
   updatePlanSection();

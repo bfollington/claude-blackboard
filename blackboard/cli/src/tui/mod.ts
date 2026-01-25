@@ -165,6 +165,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
   // (deno_tui's Computed signals register dependencies asynchronously via trackDependencies())
   await new Promise((resolve) => setTimeout(resolve, 10));
   actions.loadThreads();
+  actions.loadWorkers();
 
   // Track currently open file for import
   let currentOpenFile: OpenFile | null = null;
@@ -256,6 +257,15 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
 
     // Initial check
     updateFindInput();
+
+    // Set up auto-refresh every 5 seconds
+    const REFRESH_INTERVAL_MS = 5000;
+    const refreshInterval = setInterval(() => {
+      // Only refresh if not in find mode
+      if (!state.findState.value.isActive) {
+        actions.refreshAll();
+      }
+    }, REFRESH_INTERVAL_MS);
 
     // Handle keybindings
     tui.on("keyPress", async (event) => {
@@ -369,6 +379,37 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         return;
       }
 
+      // Worker operations (when focused on list pane)
+      if (!findActive && event.key === "w" && state.focusedPane.value === "list") {
+        const thread = state.selectedThread.value;
+        if (thread) {
+          if (thread.status !== "active" && thread.status !== "paused") {
+            actions.setStatusMessage("Can only spawn workers for active/paused threads");
+          } else {
+            actions.setStatusMessage("Spawning worker...");
+            actions.spawnWorker(thread);
+          }
+        }
+        return;
+      }
+
+      // Kill worker with Shift+W (when focused on list pane)
+      if (!findActive && event.shift && event.key === "w" && state.focusedPane.value === "list") {
+        const thread = state.selectedThread.value;
+        if (thread) {
+          const workers = state.workersForSelectedThread.value;
+          if (workers.length === 0) {
+            actions.setStatusMessage("No active workers for this thread");
+          } else if (workers.length === 1) {
+            actions.killWorker(workers[0].id);
+          } else {
+            // Multiple workers - kill all
+            actions.killAllWorkersForThread(thread);
+          }
+        }
+        return;
+      }
+
       // Navigation and actions based on focused pane
       handlePaneKeyPress(event, state, actions);
     });
@@ -392,6 +433,9 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     cleanupDetailPanel();
     cleanupThreadList();
     cleanupTabBar();
+
+    // Clear refresh interval
+    clearInterval(refreshInterval);
 
     // Destroy TUI
     tui.destroy();

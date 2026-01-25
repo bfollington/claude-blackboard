@@ -149,8 +149,9 @@ function padLine(text: string, width: number): string {
 }
 
 /**
- * Format a single thread row with status icon, name, pending count, and time.
+ * Format a single thread row with status icon, name, worker count, pending count, and time.
  * Returns PLAIN TEXT - styling is handled by the component theme.
+ * Format: ">* thread-name [2w] (3) - 5m ago"
  */
 function formatThreadRow(
   item: ThreadListItem,
@@ -163,21 +164,27 @@ function formatThreadRow(
   // Use > or space to indicate selection
   const selectionIndicator = isSelected ? (isFocused ? ">" : "*") : " ";
 
-  // Build the row content
+  // Build worker indicator
+  const workerStr = item.workerCount > 0 ? `[${item.workerCount}w]` : "";
+
+  // Build pending/status indicator
   const pendingStr = item.pendingStepsCount > 0
     ? `(${item.pendingStepsCount})`
     : (item.status === "completed" ? "(done)" : "");
   const timeStr = item.lastUpdatedRelative;
 
-  // Calculate available space for name
-  const fixedParts = 5 + pendingStr.length + 3 + timeStr.length + 1;
+  // Calculate available space for name (account for worker indicator)
+  const fixedParts = 5 + (workerStr ? workerStr.length + 1 : 0) + (pendingStr ? pendingStr.length + 1 : 0) + 3 + timeStr.length;
   const nameWidth = Math.max(10, maxWidth - fixedParts);
   const truncatedName = item.name.length > nameWidth
     ? item.name.slice(0, nameWidth - 1) + "~"
     : item.name.padEnd(nameWidth);
 
-  // Build plain text line
+  // Build plain text line: ">* name [2w] (3) - 5m"
   let line = `${selectionIndicator}${icon} ${truncatedName}`;
+  if (workerStr) {
+    line += ` ${workerStr}`;
+  }
   if (pendingStr) {
     line += ` ${pendingStr}`;
   }

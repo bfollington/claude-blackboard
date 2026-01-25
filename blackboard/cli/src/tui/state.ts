@@ -11,6 +11,8 @@ import type {
   Breadcrumb,
   BugReport,
   ThreadStatus,
+  BugReportStatus,
+  Worker,
 } from "../types/schema.ts";
 import {
   listThreads,
@@ -23,7 +25,14 @@ import {
   updatePlanMarkdown,
   updateStepDescription,
   updateBreadcrumbSummary,
+  listBugReports,
+  updateBugReportStatus,
 } from "../db/queries.ts";
+import { getActiveWorkers, updateWorkerStatus, insertWorker } from "../db/worker-queries.ts";
+import { dockerRun, dockerKill, isDockerAvailable, type ContainerOptions } from "../docker/client.ts";
+import { generateId } from "../utils/id.ts";
+import { dirname } from "jsr:@std/path";
+import { resolveDbPath } from "../db/connection.ts";
 
 // Tab identifiers for the main navigation
 export type TabId = "threads" | "bugs" | "reflections";
@@ -33,6 +42,9 @@ export type PaneId = "list" | "plan" | "steps" | "crumbs";
 
 // Status filter for thread list
 export type ThreadFilter = "all" | ThreadStatus;
+
+// Status filter for bug list
+export type BugFilter = "all" | BugReportStatus;
 
 // Find/search state
 export interface FindMatch {
@@ -54,6 +66,15 @@ export interface FindState {
 export interface ThreadListItem extends Thread {
   pendingStepsCount: number;
   lastUpdatedRelative: string;
+  workerCount: number;
+}
+
+/**
+ * Bug report with computed display data for the list view.
+ */
+export interface BugListItem extends BugReport {
+  titleTruncated: string;
+  createdAtRelative: string;
 }
 
 /**
@@ -77,10 +98,23 @@ export interface TuiState {
   selectedStepIndex: Signal<number>;
   selectedCrumbIndex: Signal<number>;
 
+  // Worker state
+  workers: Signal<Worker[]>;
+
+  // Bug reports state
+  bugReports: Signal<BugReport[]>;
+  selectedBugIndex: Signal<number>;
+  bugFilter: Signal<BugFilter>;
+
   // Computed values
   selectedThread: Computed<Thread | null>;
   filteredThreads: Computed<Thread[]>;
   threadListItems: Computed<ThreadListItem[]>;
+  workersForSelectedThread: Computed<Worker[]>;
+  threadWorkerCounts: Computed<Map<string, number>>;
+  selectedBug: Computed<BugReport | null>;
+  filteredBugs: Computed<BugReport[]>;
+  bugListItems: Computed<BugListItem[]>;
 
   // UI state
   shouldQuit: Signal<boolean>;
@@ -132,6 +166,14 @@ export function createTuiState(): TuiState {
   const selectedStepIndex = new Signal<number>(0);
   const selectedCrumbIndex = new Signal<number>(0);
 
+  // Worker state
+  const workers = new Signal<Worker[]>([]);
+
+  // Bug reports state
+  const bugReports = new Signal<BugReport[]>([]);
+  const selectedBugIndex = new Signal<number>(0);
+  const bugFilter = new Signal<BugFilter>("all");
+
   // UI state
   const shouldQuit = new Signal<boolean>(false);
   const isLoading = new Signal<boolean>(false);
@@ -165,9 +207,29 @@ export function createTuiState(): TuiState {
     return null;
   });
 
+  // Computed: workers for selected thread
+  const workersForSelectedThread = new Computed<Worker[]>(() => {
+    const thread = selectedThread.value;
+    if (!thread) return [];
+    return workers.value.filter(w => w.thread_id === thread.id && w.status === 'running');
+  });
+
+  // Computed: worker counts per thread
+  const threadWorkerCounts = new Computed<Map<string, number>>(() => {
+    const counts = new Map<string, number>();
+    for (const worker of workers.value) {
+      if (worker.status === 'running') {
+        const current = counts.get(worker.thread_id) || 0;
+        counts.set(worker.thread_id, current + 1);
+      }
+    }
+    return counts;
+  });
+
   // Computed: thread list items with display data
   const threadListItems = new Computed<ThreadListItem[]>(() => {
     const filtered = filteredThreads.value;
+    const workerCounts = threadWorkerCounts.value;
     return filtered.map((thread) => {
       // Count pending steps if thread has a plan
       let pendingStepsCount = 0;
@@ -181,6 +243,45 @@ export function createTuiState(): TuiState {
         ...thread,
         pendingStepsCount,
         lastUpdatedRelative: relativeTime(thread.updated_at),
+        workerCount: workerCounts.get(thread.id) || 0,
+      };
+    });
+  });
+
+  // Computed: filter bug reports based on current filter
+  const filteredBugs = new Computed<BugReport[]>(() => {
+    const filter = bugFilter.value;
+    const allBugs = bugReports.value;
+    if (filter === "all") {
+      return allBugs;
+    }
+    return allBugs.filter((b) => b.status === filter);
+  });
+
+  // Computed: get currently selected bug
+  const selectedBug = new Computed<BugReport | null>(() => {
+    const filtered = filteredBugs.value;
+    const index = selectedBugIndex.value;
+    if (index >= 0 && index < filtered.length) {
+      return filtered[index];
+    }
+    return null;
+  });
+
+  // Computed: bug list items with display data
+  const bugListItems = new Computed<BugListItem[]>(() => {
+    const filtered = filteredBugs.value;
+    return filtered.map((bug) => {
+      // Truncate title to max 60 chars
+      const maxTitleLength = 60;
+      const titleTruncated = bug.title.length > maxTitleLength
+        ? bug.title.substring(0, maxTitleLength - 1) + "~"
+        : bug.title;
+
+      return {
+        ...bug,
+        titleTruncated,
+        createdAtRelative: relativeTime(bug.created_at),
       };
     });
   });
@@ -196,9 +297,18 @@ export function createTuiState(): TuiState {
     breadcrumbs,
     selectedStepIndex,
     selectedCrumbIndex,
+    workers,
+    bugReports,
+    selectedBugIndex,
+    bugFilter,
     selectedThread,
     filteredThreads,
     threadListItems,
+    workersForSelectedThread,
+    threadWorkerCounts,
+    selectedBug,
+    filteredBugs,
+    bugListItems,
     shouldQuit,
     isLoading,
     statusMessage,
@@ -235,6 +345,22 @@ export interface TuiActions {
   // Thread operations
   archiveThread: (thread: Thread) => void;
   toggleThreadPause: (thread: Thread) => void;
+
+  // Worker operations
+  loadWorkers: () => void;
+  spawnWorker: (thread: Thread) => Promise<void>;
+  killWorker: (workerId: string) => Promise<void>;
+  killAllWorkersForThread: (thread: Thread) => Promise<void>;
+
+  // Bug report operations
+  loadBugReports: () => void;
+  selectBug: (index: number) => void;
+  moveBugSelection: (delta: number) => void;
+  cycleBugFilter: () => void;
+  updateBugStatus: (bug: BugReport, status: BugReportStatus) => void;
+
+  // Auto-refresh
+  refreshAll: () => void;
 
   // UI
   setStatusMessage: (message: string) => void;
@@ -458,6 +584,16 @@ export function createTuiActions(state: TuiState): TuiActions {
     },
 
     archiveThread(thread: Thread) {
+      // Check if thread has active workers
+      const threadWorkers = state.workers.value.filter(
+        w => w.thread_id === thread.id && w.status === 'running'
+      );
+
+      if (threadWorkers.length > 0) {
+        this.setStatusMessage(`Cannot archive: ${threadWorkers.length} active worker(s)`);
+        return;
+      }
+
       updateThread(thread.id, { status: "archived" });
       this.loadThreads();
       this.setStatusMessage(`Thread "${thread.name}" archived`);
@@ -471,6 +607,159 @@ export function createTuiActions(state: TuiState): TuiActions {
       this.setStatusMessage(
         `Thread "${thread.name}" ${newStatus === "paused" ? "paused" : "resumed"}`
       );
+    },
+
+    loadWorkers() {
+      const activeWorkers = getActiveWorkers();
+      state.workers.value = activeWorkers;
+    },
+
+    async spawnWorker(thread: Thread) {
+      // Check Docker availability
+      const dockerAvailable = await isDockerAvailable();
+      if (!dockerAvailable) {
+        this.setStatusMessage("Docker not available");
+        return;
+      }
+
+      // Generate worker ID
+      const workerId = generateId();
+
+      // Resolve paths
+      const dbPath = resolveDbPath();
+      const dbDir = dirname(dbPath);
+
+      // Check for API key
+      const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+      if (!apiKey) {
+        this.setStatusMessage("ANTHROPIC_API_KEY not set");
+        return;
+      }
+
+      try {
+        const containerOptions: ContainerOptions = {
+          image: "blackboard-worker:latest",
+          threadName: thread.name,
+          dbDir,
+          repoDir: Deno.cwd(),
+          authMode: "env",
+          apiKey,
+          maxIterations: 50,
+          memory: "512m",
+          workerId,
+        };
+
+        const containerId = await dockerRun(containerOptions);
+
+        insertWorker({
+          id: workerId,
+          container_id: containerId,
+          thread_id: thread.id,
+          status: "running",
+          auth_mode: "env",
+          iteration: 0,
+          max_iterations: 50,
+        });
+
+        this.loadWorkers();
+        this.setStatusMessage(`Worker ${workerId.slice(0, 7)} spawned`);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.setStatusMessage(`Spawn failed: ${msg.slice(0, 40)}`);
+      }
+    },
+
+    async killWorker(workerId: string) {
+      const worker = state.workers.value.find(w => w.id === workerId);
+      if (!worker) {
+        this.setStatusMessage("Worker not found");
+        return;
+      }
+
+      try {
+        await dockerKill(worker.container_id);
+      } catch {
+        // Container may already be dead
+      }
+
+      updateWorkerStatus(workerId, "killed");
+      this.loadWorkers();
+      this.setStatusMessage(`Worker ${workerId.slice(0, 7)} killed`);
+    },
+
+    async killAllWorkersForThread(thread: Thread) {
+      const threadWorkers = state.workers.value.filter(
+        w => w.thread_id === thread.id && w.status === 'running'
+      );
+
+      for (const worker of threadWorkers) {
+        try {
+          await dockerKill(worker.container_id);
+        } catch {
+          // Container may already be dead
+        }
+        updateWorkerStatus(worker.id, "killed");
+      }
+
+      this.loadWorkers();
+      this.setStatusMessage(`Killed ${threadWorkers.length} worker(s)`);
+    },
+
+    loadBugReports() {
+      state.isLoading.value = true;
+      try {
+        const filter = state.bugFilter.value;
+        const bugList =
+          filter === "all" ? listBugReports() : listBugReports(filter);
+        state.bugReports.value = bugList;
+
+        // Reset selection if out of bounds
+        if (state.selectedBugIndex.value >= bugList.length) {
+          state.selectedBugIndex.value = Math.max(0, bugList.length - 1);
+        }
+      } finally {
+        state.isLoading.value = false;
+      }
+    },
+
+    selectBug(index: number) {
+      const filtered = state.filteredBugs.value;
+      if (index >= 0 && index < filtered.length) {
+        state.selectedBugIndex.value = index;
+      }
+    },
+
+    moveBugSelection(delta: number) {
+      const filtered = state.filteredBugs.value;
+      const newIndex = state.selectedBugIndex.value + delta;
+      if (newIndex >= 0 && newIndex < filtered.length) {
+        this.selectBug(newIndex);
+      }
+    },
+
+    cycleBugFilter() {
+      const bugFilterOrder: BugFilter[] = ["all", "open", "resolved", "wontfix"];
+      const currentIndex = bugFilterOrder.indexOf(state.bugFilter.value);
+      const nextIndex = (currentIndex + 1) % bugFilterOrder.length;
+      state.bugFilter.value = bugFilterOrder[nextIndex];
+      state.selectedBugIndex.value = 0;
+      this.loadBugReports();
+    },
+
+    updateBugStatus(bug: BugReport, status: BugReportStatus) {
+      updateBugReportStatus(bug.id, status);
+      this.loadBugReports();
+      const statusLabel = status === "open" ? "reopened" : status;
+      this.setStatusMessage(`Bug "${bug.title.substring(0, 30)}..." ${statusLabel}`);
+    },
+
+    refreshAll() {
+      this.loadThreads();
+      this.loadWorkers();
+      const thread = state.selectedThread.value;
+      if (thread) {
+        this.loadThreadDetails(thread);
+      }
     },
 
     setStatusMessage(message: string) {
