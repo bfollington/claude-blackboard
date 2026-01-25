@@ -23,18 +23,10 @@ export interface ThreadListOptions {
 
 // Status icons for different thread states
 const STATUS_ICONS: Record<string, string> = {
-  active: "●",    // Filled circle - active
-  paused: "○",    // Empty circle - paused
-  completed: "✓", // Checkmark - completed
-  archived: "◌",  // Dotted circle - archived
-};
-
-// Colors for status icons
-const STATUS_COLORS: Record<string, (text: string) => string> = {
-  active: (t) => crayon.green(t),
-  paused: (t) => crayon.yellow(t),
-  completed: (t) => crayon.cyan(t),
-  archived: (t) => crayon.lightBlack(t),
+  active: "*",    // Active
+  paused: "o",    // Paused
+  completed: "x", // Completed
+  archived: ".",  // Archived
 };
 
 /**
@@ -78,14 +70,13 @@ export function createThreadList(options: ThreadListOptions): () => void {
   });
   components.push(header);
 
-  // Thread rows - we'll create a fixed number of row slots
-  const maxVisibleRows = rectangle.height - 2; // -1 for header, -1 for bottom margin
-  const rowTexts: Signal<string>[] = [];
-  const rowComponents: Text[] = [];
+  // Thread rows - create row components
+  const maxVisibleRows = rectangle.height - 2;
+
+  const rows: { text: Signal<string>; component: Text }[] = [];
 
   for (let i = 0; i < maxVisibleRows; i++) {
     const rowText = new Signal<string>("");
-    rowTexts.push(rowText);
 
     const text = new Text({
       parent: tui,
@@ -97,7 +88,8 @@ export function createThreadList(options: ThreadListOptions): () => void {
       },
       zIndex: 2,
     });
-    rowComponents.push(text);
+
+    rows.push({ text: rowText, component: text });
     components.push(text);
   }
 
@@ -107,29 +99,24 @@ export function createThreadList(options: ThreadListOptions): () => void {
     const selectedIndex = state.selectedThreadIndex.value;
     const focusedOnList = state.focusedPane.value === "list";
 
-    // Handle empty state
-    if (items.length === 0) {
-      const filter = state.threadFilter.value;
-      const emptyMsg = filter === "all"
-        ? " No threads yet"
-        : ` No ${filter} threads`;
-      const hintMsg = " Create with: blackboard thread new <name>";
-
-      rowTexts[0].value = padLine(crayon.lightBlack(emptyMsg), rectangle.width);
-      rowTexts[1].value = padLine(crayon.lightBlack(hintMsg), rectangle.width);
-      for (let i = 2; i < maxVisibleRows; i++) {
-        rowTexts[i].value = " ".repeat(rectangle.width);
-      }
-      return;
-    }
-
     for (let i = 0; i < maxVisibleRows; i++) {
-      if (i < items.length) {
+      const row = rows[i];
+
+      if (items.length === 0 && i < 2) {
+        // Empty state messages
+        const filter = state.threadFilter.value;
+        if (i === 0) {
+          row.text.value = padLine(filter === "all" ? " No threads yet" : ` No ${filter} threads`, rectangle.width);
+        } else {
+          row.text.value = padLine(" Create: blackboard thread new <name>", rectangle.width);
+        }
+      } else if (i < items.length) {
         const item = items[i];
         const isSelected = i === selectedIndex;
-        rowTexts[i].value = formatThreadRow(item, isSelected, focusedOnList, rectangle.width);
+        // Use > prefix to indicate selection since we can't change bg color dynamically
+        row.text.value = formatThreadRow(item, isSelected, focusedOnList, rectangle.width);
       } else {
-        rowTexts[i].value = " ".repeat(rectangle.width);
+        row.text.value = " ".repeat(rectangle.width);
       }
     }
   };
@@ -163,6 +150,7 @@ function padLine(text: string, width: number): string {
 
 /**
  * Format a single thread row with status icon, name, pending count, and time.
+ * Returns PLAIN TEXT - styling is handled by the component theme.
  */
 function formatThreadRow(
   item: ThreadListItem,
@@ -171,44 +159,29 @@ function formatThreadRow(
   maxWidth: number
 ): string {
   const icon = STATUS_ICONS[item.status] || "?";
-  const colorFn = STATUS_COLORS[item.status] || ((t: string) => t);
+
+  // Use > or space to indicate selection
+  const selectionIndicator = isSelected ? (isFocused ? ">" : "*") : " ";
 
   // Build the row content
   const pendingStr = item.pendingStepsCount > 0
-    ? `${item.pendingStepsCount} pending`
-    : (item.status === "completed" ? "done" : "");
+    ? `(${item.pendingStepsCount})`
+    : (item.status === "completed" ? "(done)" : "");
   const timeStr = item.lastUpdatedRelative;
 
   // Calculate available space for name
-  // Format: " ● name          3 pending - 2h ago "
-  const fixedParts = 4 + pendingStr.length + 3 + timeStr.length + 1; // icon + spaces + " - " + padding
+  const fixedParts = 5 + pendingStr.length + 3 + timeStr.length + 1;
   const nameWidth = Math.max(10, maxWidth - fixedParts);
   const truncatedName = item.name.length > nameWidth
-    ? item.name.slice(0, nameWidth - 1) + "…"
+    ? item.name.slice(0, nameWidth - 1) + "~"
     : item.name.padEnd(nameWidth);
 
-  // Build the line
-  let line = ` ${colorFn(icon)} ${truncatedName}`;
+  // Build plain text line
+  let line = `${selectionIndicator}${icon} ${truncatedName}`;
   if (pendingStr) {
-    line += `  ${crayon.lightBlack(pendingStr)}`;
+    line += ` ${pendingStr}`;
   }
-  line += ` ${crayon.lightBlack("- " + timeStr)} `;
+  line += ` - ${timeStr}`;
 
-  // Pad or truncate to exact width
-  if (line.length < maxWidth) {
-    line = line + " ".repeat(maxWidth - line.length);
-  }
-
-  // Apply selection highlighting
-  if (isSelected) {
-    if (isFocused) {
-      // Bright highlight when focused
-      return crayon.bgWhite.black(line);
-    } else {
-      // Dim highlight when not focused
-      return crayon.bgLightBlack(line);
-    }
-  }
-
-  return line;
+  return padLine(line, maxWidth);
 }

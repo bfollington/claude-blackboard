@@ -54,48 +54,40 @@ export function createStatusBar(options: StatusBarOptions): () => void {
   });
   components.push(bar);
 
-  // Status text signal
-  const statusText = new Signal<string>("");
-
-  // Update status text based on state
-  const updateStatus = () => {
+  // Status text - plain text, styled by theme
+  const statusText = new Computed(() => {
     const thread = state.selectedThread.value;
     const pane = state.focusedPane.value;
     const message = state.statusMessage.value;
 
-    // Build status line
+    // Build plain text status line
     const parts: string[] = [];
 
     // Thread name
-    if (thread) {
-      parts.push(crayon.white.bold(thread.name));
-    } else {
-      parts.push(crayon.lightBlack("No thread selected"));
-    }
+    parts.push(thread ? thread.name : "No thread");
 
-    // Separator
-    parts.push(crayon.lightBlack(" | "));
+    // Separator and pane
+    parts.push(" | ");
+    parts.push(PANE_NAMES[pane]);
 
-    // Current pane
-    parts.push(crayon.cyan(PANE_NAMES[pane]));
-
-    // Separator
-    parts.push(crayon.lightBlack(" | "));
-
-    // Keybinding hints
-    parts.push(crayon.lightBlack(PANE_HINTS[pane]));
-
-    // Global hints
-    parts.push(crayon.lightBlack(" ?:help q:quit"));
+    // Separator and hints
+    parts.push(" | ");
+    parts.push(PANE_HINTS[pane]);
+    parts.push(" | q:quit");
 
     // Status message (if any)
     if (message) {
-      parts.push(crayon.lightBlack(" | "));
-      parts.push(crayon.yellow(message));
+      parts.push(" | ");
+      parts.push(message);
     }
 
-    statusText.value = " " + parts.join("");
-  };
+    // Pad to width
+    const text = " " + parts.join("");
+    if (text.length < width) {
+      return text + " ".repeat(width - text.length);
+    }
+    return text.slice(0, width);
+  });
 
   // Create status text component
   const statusTextComponent = new Text({
@@ -109,14 +101,6 @@ export function createStatusBar(options: StatusBarOptions): () => void {
     zIndex: 11,
   });
   components.push(statusTextComponent);
-
-  // Subscribe to state changes
-  state.selectedThread.subscribe(updateStatus);
-  state.focusedPane.subscribe(updateStatus);
-  state.statusMessage.subscribe(updateStatus);
-
-  // Initial render
-  updateStatus();
 
   // Return cleanup function
   return () => {
