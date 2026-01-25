@@ -51,6 +51,10 @@ git checkout "$BRANCH" 2>/dev/null || git checkout -b "$BRANCH"
 mkdir -p "$WORK_DIR/.claude/agents"
 cp -r /app/claude-config/agents/* "$WORK_DIR/.claude/agents/" 2>/dev/null || true
 
+# Idle detection - get initial plan ID for tracking
+PLAN_ID=$(blackboard --db "$DB_PATH" query \
+  "SELECT p.id FROM plans p JOIN threads t ON p.id = t.current_plan_id WHERE t.name = '$THREAD_NAME' LIMIT 1" 2>/dev/null | grep -v "^id$" | head -1 || echo "")
+
 # Main Ralph Wiggum loop
 while [ $iteration -lt $MAX_ITERATIONS ]; do
   iteration=$((iteration + 1))
@@ -58,6 +62,12 @@ while [ $iteration -lt $MAX_ITERATIONS ]; do
   # Update iteration in DB
   blackboard --db "$DB_PATH" query \
     "UPDATE workers SET iteration = $iteration WHERE id = '$WORKER_ID'" 2>/dev/null || true
+
+  # Capture state for idle detection
+  PREV_CRUMB_COUNT=$(blackboard --db "$DB_PATH" query \
+    "SELECT COUNT(*) as cnt FROM breadcrumbs WHERE plan_id = '$PLAN_ID'" 2>/dev/null | grep -v "^cnt$" | head -1 || echo "0")
+  PREV_STEP_STATE=$(blackboard --db "$DB_PATH" query \
+    "SELECT GROUP_CONCAT(status) FROM plan_steps WHERE plan_id = '$PLAN_ID'" 2>/dev/null | tail -1 || echo "")
 
   # Generate context packet for the thread
   CONTEXT=$(blackboard --db "$DB_PATH" thread status "$THREAD_NAME" --json 2>/dev/null || echo '{"error": "failed to get context"}')
@@ -166,7 +176,7 @@ Do NOT output the completion promise until all work is truly done."
   STDERR_FILE=$(mktemp)
 
   set +e
-  claude -p "$PROMPT" \
+  timeout 600 claude -p "$PROMPT" \
     --output-format json \
     --dangerously-skip-permissions \
     --append-system-prompt "IMPORTANT: Record breadcrumbs FREQUENTLY using 'blackboard crumb' to track your progress - after exploring code, making decisions, completing modifications, running tests, etc. Update the plan with 'blackboard thread plan' if you discover it needs changes. Use 'blackboard query' to inspect or update the database as needed. Git commits are only required if you modified files - plan-only work (research, planning, adding steps) doesn't need commits. When all steps are genuinely complete, output '${COMPLETION_PROMISE}'. Do not output it prematurely." \
@@ -196,6 +206,16 @@ Do NOT output the completion promise until all work is truly done."
 
   # Handle errors
   if [ $STATUS -ne 0 ]; then
+    # Timeout handling (exit code 124)
+    if [ $STATUS -eq 124 ]; then
+      MSG="Claude CLI timed out after 600 seconds in iteration $iteration"
+      echo "[worker:${WORKER_ID}] $MSG"
+      log_to_db "system" "$MSG" "$iteration"
+      blackboard --db "$DB_PATH" crumb "$MSG" \
+        --agent worker --next "Timeout occurred - retrying in next iteration" 2>/dev/null || true
+      sleep 5
+      continue
+    fi
     # Rate limit handling with exponential backoff
     if [ $STATUS -eq 429 ] || [ $STATUS -eq 529 ]; then
       BACKOFF=$((2 ** (iteration % 6)))
@@ -223,6 +243,33 @@ Do NOT output the completion promise until all work is truly done."
   # Check for completion promise
   if echo "$RESULT" | grep -q "$COMPLETION_PROMISE"; then
     MSG="Thread work complete after $iteration iterations"
+    echo "[worker:${WORKER_ID}] $MSG"
+    log_to_db "system" "$MSG" "$iteration"
+    blackboard --db "$DB_PATH" query \
+      "UPDATE workers SET status = 'completed', iteration = $iteration WHERE id = '$WORKER_ID'" 2>/dev/null || true
+    exit 0
+  fi
+
+  # Also check if plan is marked complete in database
+  PLAN_COMPLETE=$(blackboard --db "$DB_PATH" query \
+    "SELECT 1 FROM plans p JOIN threads t ON p.id = t.current_plan_id WHERE t.name = '$THREAD_NAME' AND p.status = 'completed' LIMIT 1" 2>/dev/null || echo "")
+  if [ -n "$PLAN_COMPLETE" ]; then
+    MSG="Plan completed (detected via database) after $iteration iterations"
+    echo "[worker:${WORKER_ID}] $MSG"
+    log_to_db "system" "$MSG" "$iteration"
+    blackboard --db "$DB_PATH" query \
+      "UPDATE workers SET status = 'completed', iteration = $iteration WHERE id = '$WORKER_ID'" 2>/dev/null || true
+    exit 0
+  fi
+
+  # Idle detection - check if any progress was made
+  NEW_CRUMB_COUNT=$(blackboard --db "$DB_PATH" query \
+    "SELECT COUNT(*) as cnt FROM breadcrumbs WHERE plan_id = '$PLAN_ID'" 2>/dev/null | grep -v "^cnt$" | head -1 || echo "0")
+  NEW_STEP_STATE=$(blackboard --db "$DB_PATH" query \
+    "SELECT GROUP_CONCAT(status) FROM plan_steps WHERE plan_id = '$PLAN_ID'" 2>/dev/null | tail -1 || echo "")
+
+  if [ "$PREV_CRUMB_COUNT" = "$NEW_CRUMB_COUNT" ] && [ "$PREV_STEP_STATE" = "$NEW_STEP_STATE" ]; then
+    MSG="No progress detected in iteration $iteration - exiting (idle)"
     echo "[worker:${WORKER_ID}] $MSG"
     log_to_db "system" "$MSG" "$iteration"
     blackboard --db "$DB_PATH" query \
