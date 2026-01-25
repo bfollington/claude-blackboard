@@ -240,6 +240,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
           onNext: () => actions.findNext(),
           onPrevious: () => actions.findPrevious(),
           onExit: () => actions.exitFind(),
+          onClear: () => actions.clearFind(),
         });
         findInputCleanups.push(cleanup);
       } else if (!state.findState.value.isActive && findInputCleanups.length > 0) {
@@ -283,10 +284,15 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         return;
       }
 
-      // Exit find on Escape (even when not in input mode)
+      // Clear find on Escape
       if (event.key === "escape") {
+        const findState = state.findState.value;
         if (findActive) {
-          actions.exitFind();
+          // If typing, cancel the search
+          actions.clearFind();
+        } else if (findState.matches.length > 0) {
+          // If not typing but have matches, clear them
+          actions.clearFind();
         }
         return;
       }

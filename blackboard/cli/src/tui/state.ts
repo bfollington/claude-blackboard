@@ -246,6 +246,7 @@ export interface TuiActions {
   findNext: () => void;
   findPrevious: () => void;
   exitFind: () => void;
+  clearFind: () => void;
 
   // Edit operations (return content for external editor)
   getPlanMarkdown: () => string | null;
@@ -556,7 +557,7 @@ export function createTuiActions(state: TuiState): TuiActions {
 
     findNext() {
       const currentFind = state.findState.value;
-      if (!currentFind.isActive || currentFind.matches.length === 0) return;
+      if (currentFind.matches.length === 0) return;
 
       const nextIndex = (currentFind.currentMatchIndex + 1) % currentFind.matches.length;
       state.findState.value = {
@@ -568,7 +569,7 @@ export function createTuiActions(state: TuiState): TuiActions {
 
     findPrevious() {
       const currentFind = state.findState.value;
-      if (!currentFind.isActive || currentFind.matches.length === 0) return;
+      if (currentFind.matches.length === 0) return;
 
       const prevIndex = currentFind.currentMatchIndex - 1 < 0
         ? currentFind.matches.length - 1
@@ -581,6 +582,14 @@ export function createTuiActions(state: TuiState): TuiActions {
     },
 
     exitFind() {
+      const currentFind = state.findState.value;
+      state.findState.value = {
+        ...currentFind,
+        isActive: false,
+      };
+    },
+
+    clearFind() {
       state.findState.value = {
         isActive: false,
         query: "",

@@ -16,6 +16,7 @@ export interface FindInputOptions {
   onNext: () => void;
   onPrevious: () => void;
   onExit: () => void;
+  onClear: () => void;
 }
 
 /**
@@ -23,7 +24,7 @@ export interface FindInputOptions {
  * Returns cleanup function to destroy components.
  */
 export function createFindInput(options: FindInputOptions): () => void {
-  const { tui, state, onQueryChange, onNext, onPrevious, onExit } = options;
+  const { tui, state, onQueryChange, onNext, onPrevious, onExit, onClear } = options;
   const components: (Text | Box)[] = [];
 
   const size = tui.canvas.size.value;
@@ -88,10 +89,10 @@ export function createFindInput(options: FindInputOptions): () => void {
   // Hint text
   const hintText = new Text({
     parent: tui,
-    text: " | n:next N:prev Esc:exit",
+    text: " | Enter:confirm Esc:cancel",
     theme: { base: crayon.bgBlue.lightBlack },
     rectangle: {
-      column: size.columns - 26,
+      column: size.columns - 28,
       row,
     },
     zIndex: 51,
@@ -107,17 +108,7 @@ export function createFindInput(options: FindInputOptions): () => void {
 
     // Handle special keys
     if (key === "escape") {
-      onExit();
-      return;
-    }
-
-    if (key === "n") {
-      onNext();
-      return;
-    }
-
-    if (key === "N") {
-      onPrevious();
+      onClear();
       return;
     }
 
@@ -129,14 +120,15 @@ export function createFindInput(options: FindInputOptions): () => void {
       return;
     }
 
-    // Handle return/enter (find next)
+    // Handle return/enter (exit find mode, keeping matches for n/N navigation)
     if (key === "return") {
-      onNext();
+      onExit();
       return;
     }
 
     // Handle printable characters
-    if (key && key.length === 1) {
+    // Skip '/' if query is empty (it's the activation key)
+    if (key && key.length === 1 && !(key === "/" && find.query === "")) {
       onQueryChange(find.query + key);
     }
   };
