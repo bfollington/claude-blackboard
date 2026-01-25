@@ -1140,11 +1140,11 @@ export function createTuiActions(state: TuiState): TuiActions {
       const threads = listThreads(state.threadFilter.value === "all" ? undefined : state.threadFilter.value);
       state.threads.value = threads;
 
-      // Reload details
-      const updatedThread = resolveThread(thread.name);
-      if (updatedThread) {
-        state.selectedThread.value = updatedThread;
-        this.loadThreadDetails(updatedThread);
+      // Reload details - find the thread index in the updated list
+      const updatedIndex = threads.findIndex(t => t.id === thread.id);
+      if (updatedIndex >= 0) {
+        state.selectedThreadIndex.value = updatedIndex;
+        this.loadThreadDetails(threads[updatedIndex]);
       }
 
       this.setStatusMessage("Plan created");

@@ -14,11 +14,13 @@ log_to_db() {
   local line="$2"
   local iter="${3:-0}"
 
-  # Escape single quotes in the line for SQL
-  local escaped_line="${line//\'/\'\'}"
+  # Use hex encoding to safely insert arbitrary text without SQL injection risk
+  # SQLite's X'...' hex literal is decoded as a blob, CAST converts to text
+  local hex_line
+  hex_line=$(printf '%s' "$line" | xxd -p | tr -d '\n')
 
   blackboard --db "$DB_PATH" query \
-    "INSERT INTO worker_logs (worker_id, stream, line, iteration) VALUES ('$WORKER_ID', '$stream', '$escaped_line', $iter)" \
+    "INSERT INTO worker_logs (worker_id, stream, line, iteration) VALUES ('$WORKER_ID', '$stream', CAST(X'$hex_line' AS TEXT), $iter)" \
     2>/dev/null || true
 }
 
@@ -27,14 +29,19 @@ git config --global user.email "worker@blackboard.local"
 git config --global user.name "Blackboard Worker ${WORKER_ID}"
 
 # Start heartbeat background process
+# Use a file to share iteration count between main loop and heartbeat subshell
 iteration=0
+ITERATION_FILE="/tmp/worker_iteration_$$"
+echo "0" > "$ITERATION_FILE"
+
 (while true; do
+  current_iter=$(cat "$ITERATION_FILE" 2>/dev/null || echo "0")
   blackboard --db "$DB_PATH" query \
-    "UPDATE workers SET last_heartbeat = datetime('now'), iteration = $iteration WHERE id = '$WORKER_ID'" 2>/dev/null || true
+    "UPDATE workers SET last_heartbeat = datetime('now'), iteration = $current_iter WHERE id = '$WORKER_ID'" 2>/dev/null || true
   sleep 10
 done) &
 HEARTBEAT_PID=$!
-trap "kill $HEARTBEAT_PID 2>/dev/null; exit" EXIT SIGTERM SIGINT
+trap "kill $HEARTBEAT_PID 2>/dev/null; rm -f '$ITERATION_FILE'; exit" EXIT SIGTERM SIGINT
 
 # Clone the repo into an isolated working directory (does not affect host checkout)
 BRANCH="threads/${THREAD_NAME}"
@@ -58,6 +65,7 @@ PLAN_ID=$(blackboard --db "$DB_PATH" query \
 # Main Ralph Wiggum loop
 while [ $iteration -lt $MAX_ITERATIONS ]; do
   iteration=$((iteration + 1))
+  echo "$iteration" > "$ITERATION_FILE"
 
   # Update iteration in DB
   blackboard --db "$DB_PATH" query \
