@@ -11,7 +11,7 @@ interface InstallOptions {
  */
 export function installCommand(options: InstallOptions): void {
   if (options.quiet) {
-    console.log("deno install -g --force --name blackboard --config deno.json --allow-read --allow-write --allow-env --allow-ffi --allow-net=github.com,objects.githubusercontent.com mod.ts");
+    console.log("deno install -g --force --name blackboard --config deno.json --allow-read --allow-write --allow-env --allow-ffi --allow-net=github.com,objects.githubusercontent.com --allow-run=docker,git,claude,open,security mod.ts");
     return;
   }
 
@@ -30,6 +30,7 @@ This runs:
     --config deno.json \\
     --allow-read --allow-write --allow-env --allow-ffi \\
     --allow-net=github.com,objects.githubusercontent.com \\
+    --allow-run=docker,git,claude,open,security \\
     mod.ts
 
 After installation, the 'blackboard' command will be available globally.
