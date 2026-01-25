@@ -389,8 +389,8 @@ function highlightMatches(
       // Current match: yellow background
       parts.push(crayon.bgYellow.black(matchedText));
     } else {
-      // Other matches: reverse video
-      parts.push(crayon.inverse(matchedText));
+      // Other matches: use bold white on dark background
+      parts.push(crayon.bold.white(matchedText));
     }
 
     lastIndex = matchIndex + query.length;
