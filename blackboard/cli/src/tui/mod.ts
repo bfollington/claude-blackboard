@@ -507,7 +507,10 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
             actions.setStatusMessage("Can only spawn workers for active/paused threads");
           } else {
             actions.setStatusMessage("Spawning worker...");
-            actions.spawnWorker(thread);
+            // Use .catch() to handle async errors since we can't await in event handler
+            actions.spawnWorker(thread).catch((err) => {
+              actions.setStatusMessage(`Spawn error: ${err.message?.slice(0, 30) || err}`);
+            });
           }
         }
         return;
@@ -521,10 +524,13 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
           if (workers.length === 0) {
             actions.setStatusMessage("No active workers for this thread");
           } else if (workers.length === 1) {
-            actions.killWorker(workers[0].id);
+            actions.killWorker(workers[0].id).catch((err) => {
+              actions.setStatusMessage(`Kill error: ${err.message?.slice(0, 30) || err}`);
+            });
           } else {
-            // Multiple workers - kill all
-            actions.killAllWorkersForThread(thread);
+            actions.killAllWorkersForThread(thread).catch((err) => {
+              actions.setStatusMessage(`Kill error: ${err.message?.slice(0, 30) || err}`);
+            });
           }
         }
         return;
