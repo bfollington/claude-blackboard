@@ -18,6 +18,7 @@ export interface ContainerOptions {
   memory?: string;         // Default: "512m"
   workerId: string;        // Pre-generated worker ID
   labels?: Record<string, string>;
+  envVars?: Record<string, string>; // Additional environment variables to pass
 }
 
 export interface ContainerInfo {
@@ -59,6 +60,43 @@ async function runDocker(args: string[]): Promise<DockerResult> {
 }
 
 // Public functions
+
+/**
+ * Parse a .env file and return key-value pairs.
+ * Handles comments, empty lines, and quoted values.
+ */
+export async function parseEnvFile(filePath: string): Promise<Record<string, string>> {
+  const envVars: Record<string, string> = {};
+
+  try {
+    const content = await Deno.readTextFile(filePath);
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      // Skip empty lines and comments
+      if (!trimmed || trimmed.startsWith("#")) continue;
+
+      const eqIndex = trimmed.indexOf("=");
+      if (eqIndex === -1) continue;
+
+      const key = trimmed.slice(0, eqIndex).trim();
+      let value = trimmed.slice(eqIndex + 1).trim();
+
+      // Remove surrounding quotes if present
+      if ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+
+      if (key) {
+        envVars[key] = value;
+      }
+    }
+  } catch {
+    // File doesn't exist or can't be read - return empty
+  }
+
+  return envVars;
+}
 
 /**
  * Check if docker is available and responsive.
@@ -135,6 +173,15 @@ export async function dockerRun(options: ContainerOptions): Promise<string> {
   } else if (options.authMode === "config") {
     const configDir = options.claudeConfigDir || `${Deno.env.get("HOME")}/.claude`;
     args.push("-v", `${configDir}:/root/.claude:ro`);
+  }
+
+  // Add additional environment variables from envVars
+  if (options.envVars) {
+    for (const [key, value] of Object.entries(options.envVars)) {
+      // Skip ANTHROPIC_API_KEY if already set above
+      if (key === "ANTHROPIC_API_KEY") continue;
+      args.push("-e", `${key}=${value}`);
+    }
   }
 
   // Add custom labels if provided
