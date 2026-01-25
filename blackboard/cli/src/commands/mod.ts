@@ -22,3 +22,4 @@ export { spawnCommand } from "./spawn.ts";
 export { drainCommand } from "./drain.ts";
 export { farmCommand } from "./farm.ts";
 export { dashboardCommand } from "./dashboard.ts";
+export { workCommand } from "./work.ts";

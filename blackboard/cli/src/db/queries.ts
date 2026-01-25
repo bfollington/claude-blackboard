@@ -491,3 +491,68 @@ export function insertReflection(
     content: reflection.content,
   });
 }
+
+// ============================================================================
+// TUI-specific queries
+// ============================================================================
+
+/**
+ * Gets a plan by its ID.
+ *
+ * @param id - Plan ID
+ * @returns Plan or null if not found
+ */
+export function getPlanById(id: string): Plan | null {
+  const db = getDb();
+  const stmt = db.prepare("SELECT * FROM plans WHERE id = :id");
+  const results = stmt.all({ id }) as Plan[];
+  return results.length > 0 ? results[0] : null;
+}
+
+/**
+ * Updates a plan's markdown content.
+ *
+ * @param id - Plan ID
+ * @param planMarkdown - New markdown content
+ */
+export function updatePlanMarkdown(id: string, planMarkdown: string): void {
+  const db = getDb();
+  const stmt = db.prepare(`
+    UPDATE plans
+    SET plan_markdown = :planMarkdown
+    WHERE id = :id
+  `);
+  stmt.run({ id, planMarkdown });
+}
+
+/**
+ * Updates a step's description.
+ *
+ * @param stepId - Step ID
+ * @param description - New description
+ */
+export function updateStepDescription(stepId: string, description: string): void {
+  const db = getDb();
+  const stmt = db.prepare(`
+    UPDATE plan_steps
+    SET description = :description
+    WHERE id = :stepId
+  `);
+  stmt.run({ stepId, description });
+}
+
+/**
+ * Updates a breadcrumb's summary.
+ *
+ * @param crumbId - Breadcrumb ID
+ * @param summary - New summary
+ */
+export function updateBreadcrumbSummary(crumbId: string, summary: string): void {
+  const db = getDb();
+  const stmt = db.prepare(`
+    UPDATE breadcrumbs
+    SET summary = :summary
+    WHERE id = :crumbId
+  `);
+  stmt.run({ crumbId, summary });
+}

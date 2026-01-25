@@ -26,13 +26,13 @@ import {
   threadNewCommand,
   threadListCommand,
   threadStatusCommand,
-  threadWorkCommand,
   workersCommand,
   killCommand,
   spawnCommand,
   drainCommand,
   farmCommand,
   dashboardCommand,
+  workCommand,
 } from "./commands/mod.ts";
 
 /**
@@ -45,7 +45,7 @@ const threadCommand = new Command()
     console.log("  new <name>      Create a new thread");
     console.log("  list            List all threads");
     console.log("  status [name]   Show thread status");
-    console.log("  work <name>     Launch Claude with thread context");
+    console.log("\nTo work on a thread, use: blackboard work <name>");
   })
   .command("new", "Create a new thread")
   .arguments("<name:string>")
@@ -68,12 +68,6 @@ const threadCommand = new Command()
   .option("-b, --brief", "Brief output (no plan markdown)")
   .action(async (options: { brief?: boolean }, name?: string) => {
     await threadStatusCommand(name, options);
-  })
-  .reset()
-  .command("work", "Launch Claude with thread context")
-  .arguments("<name:string>")
-  .action(async (_options: void, name: string) => {
-    await threadWorkCommand(name, {});
   });
 
 /**
@@ -230,7 +224,22 @@ export const cli = new Command()
   })
   .reset()
 
-  .command("spawn", "Spawn a worker container for a thread")
+  .command("work", "Work on a thread (spawns isolated container by default)")
+  .arguments("<thread-name:string>")
+  .option("--local", "Run locally instead of in container (modifies local repo)")
+  .option("--auth <mode:string>", "Auth mode: env or config", { default: "env" })
+  .option("--api-key <key:string>", "Anthropic API key")
+  .option("--repo <path:string>", "Git workspace to mount")
+  .option("--max-iterations <n:number>", "Max iterations", { default: 50 })
+  .option("--memory <size:string>", "Container memory limit", { default: "512m" })
+  .option("--image <name:string>", "Worker image", { default: "blackboard-worker:latest" })
+  .option("--build", "Build worker image before spawning")
+  .action(async (options, threadName) => {
+    await workCommand(threadName, options);
+  })
+  .reset()
+
+  .command("spawn", "Spawn a worker container for a thread (alias for 'work')")
   .arguments("<thread-name:string>")
   .option("--auth <mode:string>", "Auth mode: env or config", { default: "env" })
   .option("--api-key <key:string>", "Anthropic API key")
