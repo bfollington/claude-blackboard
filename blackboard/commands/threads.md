@@ -50,9 +50,26 @@ blackboard query "INSERT INTO plan_steps (id, plan_id, step_order, description, 
 
 Use short, descriptive IDs. Steps should be concrete and independently verifiable.
 
+## Customizing Worker Images
+
+By default, workers use the plugin's base Docker image (Node.js + Deno + Claude CLI + blackboard CLI). To add project-specific dependencies:
+
+```bash
+# Generate a customizable Dockerfile template
+blackboard init-worker
+
+# Edit Dockerfile.worker to add your language runtimes, packages, build tools, etc.
+
+# Build with your custom image
+blackboard spawn <name> --auth env --build
+```
+
+The CLI automatically uses `Dockerfile.worker` if present, falling back to the plugin default otherwise.
+
 ## Notes
 
 - Workers need `ANTHROPIC_API_KEY` set in the environment or passed via `--api-key`.
 - First spawn requires `--build` to create the Docker image.
 - Workers record breadcrumbs, mark steps complete, and commit with meaningful messages autonomously.
 - If a worker fails, check `docker logs blackboard-worker-<id>` and the thread's breadcrumbs.
+- To customize the worker environment for your project's needs, run `blackboard init-worker` to create a `Dockerfile.worker` template.
