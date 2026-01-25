@@ -11,8 +11,9 @@ export interface ContainerOptions {
   threadName: string;
   dbDir: string;           // Host path to .claude/ dir (mounts as /app/db)
   repoDir?: string;        // Host path to git workspace (mounts as /app/repo)
-  authMode: 'env' | 'config';
+  authMode: 'env' | 'config' | 'oauth';
   apiKey?: string;         // When authMode=env
+  oauthToken?: string;     // When authMode=oauth
   claudeConfigDir?: string; // When authMode=config (default: ~/.claude)
   maxIterations?: number;
   memory?: string;         // Default: "512m"
@@ -208,6 +209,10 @@ export async function dockerRun(options: ContainerOptions): Promise<string> {
     const apiKey = options.apiKey || Deno.env.get("ANTHROPIC_API_KEY");
     if (apiKey) {
       args.push("-e", `ANTHROPIC_API_KEY=${apiKey}`);
+    }
+  } else if (options.authMode === "oauth") {
+    if (options.oauthToken) {
+      args.push("-e", `CLAUDE_CODE_OAUTH_TOKEN=${options.oauthToken}`);
     }
   } else if (options.authMode === "config") {
     const configDir = options.claudeConfigDir || `${Deno.env.get("HOME")}/.claude`;

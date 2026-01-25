@@ -37,6 +37,7 @@ import { getActiveWorkers, updateWorkerStatus, insertWorker } from "../db/worker
 import { dockerRun, dockerKill, isDockerAvailable, parseEnvFile, type ContainerOptions } from "../docker/client.ts";
 import { join } from "jsr:@std/path";
 import { generateId } from "../utils/id.ts";
+import { extractAndValidateOAuthToken } from "../utils/oauth.ts";
 import { dirname } from "jsr:@std/path";
 import { resolveDbPath } from "../db/connection.ts";
 
@@ -818,12 +819,26 @@ export function createTuiActions(state: TuiState): TuiActions {
       const envFilePath = join(repoDir, ".env");
       const envVars = await parseEnvFile(envFilePath);
 
-      // Check for API key (from .env or environment)
-      const apiKey = envVars["ANTHROPIC_API_KEY"] || Deno.env.get("ANTHROPIC_API_KEY");
-      if (!apiKey) {
-        state.workerError.value = "ANTHROPIC_API_KEY not set in .env or environment";
-        this.setStatusMessage("ANTHROPIC_API_KEY not set");
-        return;
+      // Auto-detect authentication: try OAuth first, then fall back to API key
+      let authMode: "env" | "oauth";
+      let apiKey: string | undefined;
+      let oauthToken: string | undefined;
+
+      const oauthResult = await extractAndValidateOAuthToken(true); // quiet mode
+      if (oauthResult) {
+        authMode = "oauth";
+        oauthToken = oauthResult.token;
+        this.setStatusMessage("Using OAuth authentication...");
+      } else {
+        // Fall back to API key
+        apiKey = envVars["ANTHROPIC_API_KEY"] || Deno.env.get("ANTHROPIC_API_KEY");
+        if (!apiKey) {
+          state.workerError.value = "No auth available - run 'claude login' or set ANTHROPIC_API_KEY";
+          this.setStatusMessage("No authentication available");
+          return;
+        }
+        authMode = "env";
+        this.setStatusMessage("Using API key authentication...");
       }
 
       try {
@@ -833,8 +848,9 @@ export function createTuiActions(state: TuiState): TuiActions {
           threadName: thread.name,
           dbDir,
           repoDir,
-          authMode: "env",
+          authMode,
           apiKey,
+          oauthToken,
           maxIterations: 50,
           memory: "512m",
           workerId,
@@ -848,7 +864,7 @@ export function createTuiActions(state: TuiState): TuiActions {
           container_id: containerId,
           thread_id: thread.id,
           status: "running",
-          auth_mode: "env",
+          auth_mode: authMode,
           iteration: 0,
           max_iterations: 50,
         });

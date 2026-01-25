@@ -86,7 +86,7 @@ export interface Worker {
   status: WorkerStatus;
   last_heartbeat: string;
   created_at: string;
-  auth_mode: 'env' | 'config' | null;
+  auth_mode: 'env' | 'config' | 'oauth' | null;
   iteration: number;
   max_iterations: number;
 }
