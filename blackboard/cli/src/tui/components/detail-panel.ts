@@ -21,7 +21,7 @@ export interface DetailPanelOptions {
   };
 }
 
-// Step status icons
+// Step status icons (ASCII-safe)
 const STEP_ICONS: Record<string, string> = {
   pending: "[ ]",
   in_progress: "[>]",
@@ -39,7 +39,6 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   const components: (Text | Box)[] = [];
 
   // Calculate section heights
-  // Plan: ~20% (min 3 rows), Steps: ~40%, Crumbs: ~40%
   const planHeight = Math.max(3, Math.floor(rectangle.height * 0.2));
   const remainingHeight = rectangle.height - planHeight;
   const stepsHeight = Math.floor(remainingHeight * 0.5);
@@ -78,11 +77,10 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   components.push(planHeader);
 
   // Plan content rows
-  const planRows: Signal<string>[] = [];
-  const planRowComponents: Text[] = [];
+  const planRows: { text: Signal<string>; component: Text }[] = [];
   for (let i = 1; i < planHeight; i++) {
     const rowText = new Signal<string>("");
-    planRows.push(rowText);
+
     const text = new Text({
       parent: tui,
       text: rowText,
@@ -90,7 +88,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
       rectangle: { column: rectangle.column, row: planRow + i },
       zIndex: 2,
     });
-    planRowComponents.push(text);
+    planRows.push({ text: rowText, component: text });
     components.push(text);
   }
 
@@ -122,11 +120,10 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   components.push(stepsHeader);
 
   // Steps content rows
-  const stepsRows: Signal<string>[] = [];
-  const stepsRowComponents: Text[] = [];
+  const stepsRows: { text: Signal<string>; component: Text }[] = [];
   for (let i = 1; i < stepsHeight; i++) {
     const rowText = new Signal<string>("");
-    stepsRows.push(rowText);
+
     const text = new Text({
       parent: tui,
       text: rowText,
@@ -134,7 +131,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
       rectangle: { column: rectangle.column, row: stepsRow + i },
       zIndex: 2,
     });
-    stepsRowComponents.push(text);
+    stepsRows.push({ text: rowText, component: text });
     components.push(text);
   }
 
@@ -166,11 +163,10 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   components.push(crumbsHeader);
 
   // Crumbs content rows
-  const crumbsRows: Signal<string>[] = [];
-  const crumbsRowComponents: Text[] = [];
+  const crumbsRows: { text: Signal<string>; component: Text }[] = [];
   for (let i = 1; i < crumbsHeight; i++) {
     const rowText = new Signal<string>("");
-    crumbsRows.push(rowText);
+
     const text = new Text({
       parent: tui,
       text: rowText,
@@ -178,7 +174,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
       rectangle: { column: rectangle.column, row: crumbsRow + i },
       zIndex: 2,
     });
-    crumbsRowComponents.push(text);
+    crumbsRows.push({ text: rowText, component: text });
     components.push(text);
   }
 
@@ -190,32 +186,29 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
     const thread = state.selectedThread.value;
     const isFocused = state.focusedPane.value === "plan";
 
-    // Update header with focus indicator
-    planHeaderText.value = isFocused
-      ? crayon.bgWhite.black.bold(" PLAN ")
-      : crayon.bgBlack.white.bold(" PLAN ");
+    // Update header to show focus state
+    planHeaderText.value = isFocused ? ">> PLAN <<" : " PLAN ";
 
     if (!thread) {
-      planRows[0].value = padLine(crayon.lightBlack(" Select a thread to view its plan"), rectangle.width);
+      if (planRows[0]) planRows[0].text.value = padLine(" Select a thread to view its plan", rectangle.width);
       for (let i = 1; i < planRows.length; i++) {
-        planRows[i].value = " ".repeat(rectangle.width);
+        planRows[i].text.value = " ".repeat(rectangle.width);
       }
       return;
     }
 
     if (!thread.current_plan_id) {
-      planRows[0].value = padLine(crayon.lightBlack(" No plan for this thread"), rectangle.width);
+      if (planRows[0]) planRows[0].text.value = padLine(" No plan for this thread", rectangle.width);
       for (let i = 1; i < planRows.length; i++) {
-        planRows[i].value = " ".repeat(rectangle.width);
+        planRows[i].text.value = " ".repeat(rectangle.width);
       }
       return;
     }
 
     // Show plan hint
-    planRows[0].value = padLine(crayon.cyan(" Plan available"), rectangle.width);
-    planRows[1].value = padLine(crayon.lightBlack(" Press 'e' to edit in $EDITOR"), rectangle.width);
-    for (let i = 2; i < planRows.length; i++) {
-      planRows[i].value = " ".repeat(rectangle.width);
+    if (planRows[0]) planRows[0].text.value = padLine(" Plan available - press 'e' to edit", rectangle.width);
+    for (let i = 1; i < planRows.length; i++) {
+      planRows[i].text.value = " ".repeat(rectangle.width);
     }
   };
 
@@ -224,29 +217,30 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
     const selectedIndex = state.selectedStepIndex.value;
     const isFocused = state.focusedPane.value === "steps";
 
-    // Update header with focus indicator and count
     const countStr = steps.length > 0 ? ` (${steps.length})` : "";
-    stepsHeaderText.value = isFocused
-      ? crayon.bgWhite.black.bold(` STEPS${countStr} `)
-      : crayon.bgBlack.white.bold(` STEPS${countStr} `);
+    stepsHeaderText.value = isFocused ? `>> STEPS${countStr} <<` : ` STEPS${countStr} `;
 
     if (steps.length === 0) {
-      stepsRows[0].value = padLine(crayon.lightBlack(" No steps defined"), rectangle.width);
-      stepsRows[1].value = padLine(crayon.lightBlack(" Steps sync from TodoWrite"), rectangle.width);
+      if (stepsRows[0]) {
+        stepsRows[0].text.value = padLine(" No steps defined", rectangle.width);
+      }
+      if (stepsRows[1]) {
+        stepsRows[1].text.value = padLine(" Steps sync from TodoWrite", rectangle.width);
+      }
       for (let i = 2; i < stepsRows.length; i++) {
-        stepsRows[i].value = " ".repeat(rectangle.width);
+        stepsRows[i].text.value = " ".repeat(rectangle.width);
       }
       return;
     }
 
-    // Render steps
+    // Render steps with selection indicator
     for (let i = 0; i < stepsRows.length; i++) {
       if (i < steps.length) {
         const step = steps[i];
         const isSelected = i === selectedIndex;
-        stepsRows[i].value = formatStepRow(step, isSelected, isFocused, rectangle.width);
+        stepsRows[i].text.value = formatStepRow(step, isSelected, isFocused, rectangle.width);
       } else {
-        stepsRows[i].value = " ".repeat(rectangle.width);
+        stepsRows[i].text.value = " ".repeat(rectangle.width);
       }
     }
   };
@@ -256,43 +250,42 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
     const selectedIndex = state.selectedCrumbIndex.value;
     const isFocused = state.focusedPane.value === "crumbs";
 
-    // Update header with focus indicator
     const countStr = crumbs.length > 0 ? ` (${crumbs.length})` : "";
-    crumbsHeaderText.value = isFocused
-      ? crayon.bgWhite.black.bold(` CRUMBS${countStr} `)
-      : crayon.bgBlack.white.bold(` CRUMBS${countStr} `);
+    crumbsHeaderText.value = isFocused ? `>> CRUMBS${countStr} <<` : ` CRUMBS${countStr} `;
 
     if (crumbs.length === 0) {
-      crumbsRows[0].value = padLine(crayon.lightBlack(" No breadcrumbs recorded"), rectangle.width);
-      crumbsRows[1].value = padLine(crayon.lightBlack(" Use /crumb to record progress"), rectangle.width);
+      if (crumbsRows[0]) {
+        crumbsRows[0].text.value = padLine(" No breadcrumbs recorded", rectangle.width);
+      }
+      if (crumbsRows[1]) {
+        crumbsRows[1].text.value = padLine(" Use /crumb to record progress", rectangle.width);
+      }
       for (let i = 2; i < crumbsRows.length; i++) {
-        crumbsRows[i].value = " ".repeat(rectangle.width);
+        crumbsRows[i].text.value = " ".repeat(rectangle.width);
       }
       return;
     }
 
-    // Render crumbs (git-log style)
+    // Render crumbs (2 lines per crumb: header + summary)
     let rowIndex = 0;
     for (let i = 0; i < crumbs.length && rowIndex < crumbsRows.length; i++) {
       const crumb = crumbs[i];
       const isSelected = i === selectedIndex;
 
-      // First line: ID, time, agent
-      const line1 = formatCrumbHeader(crumb, isSelected, isFocused, rectangle.width);
-      crumbsRows[rowIndex].value = line1;
+      // Header line with selection indicator
+      crumbsRows[rowIndex].text.value = formatCrumbHeader(crumb, isSelected, isFocused, rectangle.width);
       rowIndex++;
 
-      // Second line: summary (if room)
+      // Summary line
       if (rowIndex < crumbsRows.length) {
-        const line2 = formatCrumbSummary(crumb, isSelected, isFocused, rectangle.width);
-        crumbsRows[rowIndex].value = line2;
+        crumbsRows[rowIndex].text.value = formatCrumbSummary(crumb, rectangle.width);
         rowIndex++;
       }
     }
 
     // Clear remaining rows
     for (let i = rowIndex; i < crumbsRows.length; i++) {
-      crumbsRows[i].value = " ".repeat(rectangle.width);
+      crumbsRows[i].text.value = " ".repeat(rectangle.width);
     }
   };
 
@@ -332,7 +325,7 @@ function padLine(text: string, width: number): string {
 }
 
 /**
- * Format a step row with icon and description.
+ * Format a step row with icon and description (PLAIN TEXT).
  */
 function formatStepRow(
   step: PlanStep,
@@ -341,34 +334,20 @@ function formatStepRow(
   width: number
 ): string {
   const icon = STEP_ICONS[step.status] || "[?]";
-  const iconColored = step.status === "completed"
-    ? crayon.green(icon)
-    : step.status === "in_progress"
-    ? crayon.yellow(icon)
-    : step.status === "failed"
-    ? crayon.red(icon)
-    : crayon.white(icon);
+  const selectionIndicator = isSelected ? (isFocused ? ">" : "*") : " ";
 
   // Truncate description to fit
-  const maxDescLen = width - 6; // icon (3) + spaces (3)
+  const maxDescLen = width - 7; // selection + icon (3) + spaces (3)
   const desc = step.description.length > maxDescLen
-    ? step.description.slice(0, maxDescLen - 1) + "…"
+    ? step.description.slice(0, maxDescLen - 1) + "~"
     : step.description;
 
-  let line = ` ${iconColored} ${desc}`;
-  line = padLine(line, width);
-
-  if (isSelected) {
-    if (isFocused) {
-      return crayon.bgWhite.black(line);
-    }
-    return crayon.bgLightBlack(line);
-  }
-  return line;
+  const line = `${selectionIndicator}${icon} ${desc}`;
+  return padLine(line, width);
 }
 
 /**
- * Format crumb header line (ID, time, agent).
+ * Format crumb header line (PLAIN TEXT).
  */
 function formatCrumbHeader(
   crumb: Breadcrumb,
@@ -379,43 +358,23 @@ function formatCrumbHeader(
   const shortId = crumb.id.slice(0, 7);
   const time = relativeTime(crumb.created_at);
   const agent = crumb.agent_type || "unknown";
+  const selectionIndicator = isSelected ? (isFocused ? ">" : "*") : " ";
 
-  let line = ` ${crayon.yellow(shortId)} ${crayon.lightBlack(time)}  ${crayon.cyan(agent)}`;
-  line = padLine(line, width);
-
-  if (isSelected) {
-    if (isFocused) {
-      return crayon.bgWhite.black(line);
-    }
-    return crayon.bgLightBlack(line);
-  }
-  return line;
+  const line = `${selectionIndicator}${shortId} ${time}  ${agent}`;
+  return padLine(line, width);
 }
 
 /**
- * Format crumb summary line.
+ * Format crumb summary line (PLAIN TEXT).
  */
-function formatCrumbSummary(
-  crumb: Breadcrumb,
-  isSelected: boolean,
-  isFocused: boolean,
-  width: number
-): string {
+function formatCrumbSummary(crumb: Breadcrumb, width: number): string {
   const maxLen = width - 4;
   const summary = crumb.summary.length > maxLen
-    ? crumb.summary.slice(0, maxLen - 1) + "…"
+    ? crumb.summary.slice(0, maxLen - 1) + "~"
     : crumb.summary;
 
-  let line = ` │ ${summary}`;
-  line = padLine(line, width);
-
-  if (isSelected) {
-    if (isFocused) {
-      return crayon.bgWhite.black(line);
-    }
-    return crayon.bgLightBlack(line);
-  }
-  return crayon.lightBlack(line);
+  const line = ` | ${summary}`;
+  return padLine(line, width);
 }
 
 /**
@@ -430,7 +389,7 @@ function relativeTime(dateStr: string): string {
   const diffDays = Math.floor(diffHours / 24);
 
   if (diffMins < 1) return "now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
+  if (diffMins < 60) return `${diffMins}m`;
+  if (diffHours < 24) return `${diffHours}h`;
+  return `${diffDays}d`;
 }
