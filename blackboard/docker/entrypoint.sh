@@ -67,12 +67,19 @@ ${CONTEXT}
 
 Work on the next pending step(s). As you work:
 
-### 1. Record Progress with Breadcrumbs (REQUIRED)
-After each significant action, record a breadcrumb:
+### 1. Record Progress with Breadcrumbs (REQUIRED - USE FREQUENTLY!)
+Record breadcrumbs liberally throughout your work - after each significant action:
 \`\`\`bash
 blackboard --db ${DB_PATH} crumb \"<what you did>\" --agent worker --files \"<files touched>\"
 \`\`\`
-Breadcrumbs help track progress across iterations and aid debugging.
+Examples of when to record breadcrumbs:
+- After exploring/reading code to understand the system
+- After making a decision about implementation approach
+- After completing each file modification
+- After running tests or builds
+- When discovering important insights
+
+Breadcrumbs create a detailed audit trail that helps track progress and aids debugging.
 
 ### 2. Update Step Status
 When completing a step:
@@ -86,13 +93,20 @@ If you discover the plan needs adjustment (new steps, scope changes, blockers):
 # Write updated plan to a temp file, then:
 blackboard --db ${DB_PATH} thread plan ${THREAD_NAME} /tmp/updated-plan.md
 \`\`\`
+If the plan has no steps yet and you're doing initial research/planning, add them:
+\`\`\`bash
+# Add new steps by inserting directly into plan_steps table:
+blackboard --db ${DB_PATH} query "INSERT INTO plan_steps (id, plan_id, step_order, description) VALUES ('step-' || hex(randomblob(4)), '<plan_id>', <order>, '<description>')"
+\`\`\`
 Keeping the plan accurate helps future iterations and other workers.
 
-### 4. Commit Your Changes
+### 4. Commit Your Changes (if applicable)
+If you modified any files, commit them:
 \`\`\`bash
 git add <files>
 git commit -m \"[${THREAD_NAME}] <description>\" --no-verify
 \`\`\`
+For plan-only work (research, writing plan steps, etc.), you may not need to commit anything - that's OK!
 
 ### 5. Report Blockers
 If you hit a blocker that prevents progress:
@@ -121,7 +135,7 @@ Do NOT output the completion promise until all work is truly done."
   claude -p "$PROMPT" \
     --output-format json \
     --dangerously-skip-permissions \
-    --append-system-prompt "IMPORTANT: Record breadcrumbs frequently using 'blackboard crumb' to track your progress. Update the plan with 'blackboard thread plan' if you discover it needs changes. When all steps are genuinely complete, output '${COMPLETION_PROMISE}'. Do not output it prematurely." \
+    --append-system-prompt "IMPORTANT: Record breadcrumbs FREQUENTLY using 'blackboard crumb' to track your progress - after exploring code, making decisions, completing modifications, running tests, etc. Update the plan with 'blackboard thread plan' if you discover it needs changes. Use 'blackboard query' to inspect or update the database as needed. Git commits are only required if you modified files - plan-only work (research, planning, adding steps) doesn't need commits. When all steps are genuinely complete, output '${COMPLETION_PROMISE}'. Do not output it prematurely." \
     > "$STDOUT_FILE" 2> "$STDERR_FILE"
   STATUS=$?
   set -e
