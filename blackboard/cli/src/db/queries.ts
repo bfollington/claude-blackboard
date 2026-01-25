@@ -556,3 +556,47 @@ export function updateBreadcrumbSummary(crumbId: string, summary: string): void 
   `);
   stmt.run({ crumbId, summary });
 }
+
+// ============================================================================
+// Session State
+// ============================================================================
+
+/**
+ * Sets a session state value.
+ *
+ * @param key - State key
+ * @param value - State value
+ */
+export function setSessionState(key: string, value: string): void {
+  const db = getDb();
+  const stmt = db.prepare(`
+    INSERT INTO session_state (key, value, updated_at)
+    VALUES (:key, :value, datetime('now'))
+    ON CONFLICT(key) DO UPDATE SET value = :value, updated_at = datetime('now')
+  `);
+  stmt.run({ key, value });
+}
+
+/**
+ * Gets a session state value.
+ *
+ * @param key - State key
+ * @returns Value or null if not found
+ */
+export function getSessionState(key: string): string | null {
+  const db = getDb();
+  const stmt = db.prepare("SELECT value FROM session_state WHERE key = :key");
+  const results = stmt.all({ key }) as { value: string }[];
+  return results.length > 0 ? results[0].value : null;
+}
+
+/**
+ * Clears a session state value.
+ *
+ * @param key - State key to clear
+ */
+export function clearSessionState(key: string): void {
+  const db = getDb();
+  const stmt = db.prepare("DELETE FROM session_state WHERE key = :key");
+  stmt.run({ key });
+}

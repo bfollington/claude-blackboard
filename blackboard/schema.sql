@@ -82,6 +82,12 @@ CREATE TABLE IF NOT EXISTS workers (
     max_iterations INTEGER DEFAULT 50
 );
 
+CREATE TABLE IF NOT EXISTS session_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_breadcrumbs_plan ON breadcrumbs(plan_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_steps_plan ON plan_steps(plan_id, step_order);
 CREATE INDEX IF NOT EXISTS idx_steps_status ON plan_steps(status);

@@ -4,7 +4,7 @@
  */
 
 import { dbExists } from "../db/schema.ts";
-import { listThreads, getStepsForPlan } from "../db/queries.ts";
+import { listThreads, getStepsForPlan, clearSessionState } from "../db/queries.ts";
 
 /**
  * Formats a relative time string from ISO datetime.
@@ -35,6 +35,10 @@ export async function checkResume(): Promise<void> {
   if (!dbExists()) {
     Deno.exit(0);
   }
+
+  // Clear session state from previous sessions
+  // This ensures each session requires explicit thread selection
+  clearSessionState("selected_thread_id");
 
   // Get recent threads (all statuses, limit 5)
   const threads = listThreads(undefined, 5);

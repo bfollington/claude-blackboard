@@ -9,6 +9,7 @@ import {
   touchThread,
   updateThread,
   getCurrentThread,
+  setSessionState,
 } from "../db/queries.ts";
 import { generateContextPacket } from "../commands/thread.ts";
 
@@ -72,6 +73,9 @@ export async function loadThread(threadName?: string): Promise<void> {
 
   // Touch thread to mark as active
   touchThread(thread.id);
+
+  // Record explicit thread selection for this session
+  setSessionState("selected_thread_id", thread.id);
 
   // Update git branches if we're on a new branch
   const currentBranch = getCurrentGitBranch();

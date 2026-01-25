@@ -1,6 +1,6 @@
 /**
  * PreToolUse[ExitPlanMode] hook - Store the plan in the database.
- * Thread-aware: associates plan with current thread or creates one.
+ * Thread-aware: requires explicit thread selection before plan storage.
  */
 
 import { readStdin } from "../utils/stdin.ts";
@@ -8,10 +8,11 @@ import { generateId } from "../utils/id.ts";
 import { dbExists } from "../db/schema.ts";
 import {
   insertPlan,
-  getCurrentThread,
-  insertThread,
   updateThread,
+  getSessionState,
+  getThreadById,
 } from "../db/queries.ts";
+import type { Thread } from "../types/schema.ts";
 
 interface PreToolUseInput {
   tool_name?: string;
@@ -24,61 +25,16 @@ interface PreToolUseInput {
 }
 
 /**
- * Converts a description to a kebab-case thread name.
- * Falls back to "plan-<timestamp>" if conversion fails.
- */
-function slugifyToThreadName(description: string): string {
-  // Remove markdown headers and special chars
-  const clean = description
-    .replace(/^#+\s*/, "")
-    .replace(/[^a-zA-Z0-9\s-]/g, "")
-    .trim()
-    .toLowerCase();
-
-  if (!clean) {
-    return `plan-${Date.now()}`;
-  }
-
-  // Convert to kebab-case, limit to 50 chars
-  const slug = clean
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .substring(0, 50)
-    .replace(/-$/, "");
-
-  return slug || `plan-${Date.now()}`;
-}
-
-/**
- * Gets the current git branch.
- */
-function getCurrentGitBranch(): string | null {
-  try {
-    const command = new Deno.Command("git", {
-      args: ["rev-parse", "--abbrev-ref", "HEAD"],
-      stdout: "piped",
-      stderr: "null",
-    });
-    const result = command.outputSync();
-    if (result.success) {
-      return new TextDecoder().decode(result.stdout).trim();
-    }
-  } catch {
-    // Not in a git repo or git not available
-  }
-  return null;
-}
-
-/**
  * Store plan hook handler.
  * - Reads JSON from stdin (PreToolUseInput)
  * - Verifies tool_name === "ExitPlanMode", exits if not
  * - Extracts plan content from tool_input.plan
- * - Gets current thread or creates one from plan description
+ * - Verifies an explicit thread has been selected for this session
+ * - Blocks plan storage if no thread selected (prevents accidental overwrites)
  * - Generates plan ID, extracts description from first line
  * - Inserts plan with thread_id
  * - Updates thread's current_plan_id
- * - Outputs PreToolUseOutput with permissionDecision: "allow"
+ * - Outputs PreToolUseOutput with permissionDecision: "allow" or "block"
  */
 export async function storePlan(): Promise<void> {
   const input = await readStdin<PreToolUseInput>();
@@ -111,34 +67,39 @@ export async function storePlan(): Promise<void> {
   const firstLine = lines[0] || "";
   const description = firstLine.replace(/^#*\s*/, "").substring(0, 200);
 
-  // Get or create thread
-  let thread = getCurrentThread();
-  let threadCreated = false;
+  // Check for explicitly selected thread
+  const selectedThreadId = getSessionState("selected_thread_id");
+  let thread: Thread | null = null;
 
-  if (!thread) {
-    // No active thread - create one from plan description
-    const threadId = generateId();
-    const threadName = slugifyToThreadName(description);
-    const gitBranch = getCurrentGitBranch();
-
-    insertThread({
-      id: threadId,
-      name: threadName,
-      current_plan_id: null, // Will update after plan insert
-      git_branches: gitBranch,
-      status: "active",
-    });
-
-    thread = {
-      id: threadId,
-      name: threadName,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      current_plan_id: null,
-      git_branches: gitBranch,
-      status: "active",
-    };
-    threadCreated = true;
+  if (selectedThreadId) {
+    thread = getThreadById(selectedThreadId);
+    if (!thread) {
+      // Selected thread was deleted - clear stale state
+      console.log(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "PreToolUse",
+            permissionDecision: "block",
+            permissionDecisionReason:
+              "Previously selected thread no longer exists. Use /blackboard:thread <name> to select a thread.",
+          },
+        })
+      );
+      return;
+    }
+  } else {
+    // No explicit thread selection - block plan storage
+    console.log(
+      JSON.stringify({
+        hookSpecificOutput: {
+          hookEventName: "PreToolUse",
+          permissionDecision: "block",
+          permissionDecisionReason:
+            "No thread selected for this session. Use /blackboard:thread <name> to select an existing thread, or `blackboard thread new <name>` to create one.",
+        },
+      })
+    );
+    return;
   }
 
   // Insert plan with thread_id
@@ -155,12 +116,7 @@ export async function storePlan(): Promise<void> {
   updateThread(thread.id, { current_plan_id: planId });
 
   // Build response message
-  let reason = `Plan stored with ID: ${planId}`;
-  if (threadCreated) {
-    reason += ` (new thread: ${thread.name})`;
-  } else {
-    reason += ` (thread: ${thread.name})`;
-  }
+  let reason = `Plan stored with ID: ${planId} (thread: ${thread.name})`;
 
   // Output JSON to allow the tool and add context
   console.log(
