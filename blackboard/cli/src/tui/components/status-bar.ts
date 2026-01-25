@@ -18,10 +18,10 @@ export interface StatusBarOptions {
 
 // Keybinding hints for each pane
 const PANE_HINTS: Record<PaneId, string> = {
-  list: "j/k:nav a:archive p:pause /:find Tab:focus",
+  list: "j/k:nav w:spawn W:kill a:archive p:pause /:find",
   plan: "o:open i:import /:find Tab:focus",
-  steps: "j/k:nav Space:toggle o:open i:import J/K:reorder /:find Tab:focus",
-  crumbs: "j/k:nav o:open i:import /:find Tab:focus",
+  steps: "j/k:nav Space:toggle o:open J/K:reorder /:find",
+  crumbs: "j/k:nav o:open /:find Tab:focus",
 };
 
 // Pane display names
