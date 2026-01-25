@@ -10,13 +10,11 @@ import {
   handleMouseControls,
 } from "https://deno.land/x/tui@2.1.11/mod.ts";
 import { crayon } from "https://deno.land/x/crayon@3.3.3/mod.ts";
-import { Signal } from "https://deno.land/x/tui@2.1.11/src/signals/mod.ts";
 import { createTuiState, createTuiActions } from "./state.ts";
 import type { TuiState, TuiActions } from "./state.ts";
 import { createTabBar } from "./components/tab-bar.ts";
 import { createThreadList } from "./components/thread-list.ts";
 import { createDetailPanel } from "./components/detail-panel.ts";
-import { editInExternalEditor } from "./actions/editor.ts";
 import { createStatusBar } from "./components/status-bar.ts";
 
 export interface TuiOptions {
@@ -33,10 +31,124 @@ export interface TuiContext {
   actions: TuiActions;
 }
 
-// Edit request type for triggering external editor
-interface EditRequest {
+// Track currently open file for import
+interface OpenFile {
+  path: string;
   type: "plan" | "step" | "crumb";
   index?: number;
+  originalContent: string;
+}
+
+// ANSI escape sequences for terminal control
+const DISABLE_MOUSE = "\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l";
+const SHOW_CURSOR = "\x1b[?25h";
+
+/**
+ * Restore terminal to normal state.
+ * This disables mouse tracking and shows the cursor.
+ */
+function restoreTerminal(): void {
+  const encoder = new TextEncoder();
+  Deno.stdout.writeSync(encoder.encode(DISABLE_MOUSE + SHOW_CURSOR));
+}
+
+/**
+ * Open content in external app using 'open' command (macOS).
+ * Creates a temp file and opens it - user edits externally then uses 'i' to import.
+ */
+async function openInExternalApp(
+  content: string,
+  type: "plan" | "step" | "crumb",
+  index?: number
+): Promise<OpenFile | null> {
+  const suffix = type === "plan" ? ".md" : ".txt";
+  const prefix = type === "plan" ? "plan" : type === "step" ? "step" : "crumb";
+
+  // Create temp file with descriptive name
+  const tmpDir = await Deno.makeTempDir({ prefix: "blackboard-" });
+  const tmpFile = `${tmpDir}/${prefix}${suffix}`;
+
+  try {
+    // Write content to temp file
+    await Deno.writeTextFile(tmpFile, content);
+
+    // Use 'open' command to launch editor
+    // Respects VISUAL or EDITOR env vars, falls back to system default
+    const editor = Deno.env.get("VISUAL") || Deno.env.get("EDITOR");
+    const args = editor
+      ? ["-a", editor, tmpFile]  // open -a <app> <file>
+      : [tmpFile];               // open <file> (system default)
+
+    const cmd = new Deno.Command("open", {
+      args,
+      stdin: "null",
+      stdout: "null",
+      stderr: "null",
+    });
+
+    const result = await cmd.output();
+
+    if (!result.success) {
+      return null;
+    }
+
+    return {
+      path: tmpFile,
+      type,
+      index,
+      originalContent: content,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Import content from the open file.
+ */
+async function importOpenFile(
+  openFile: OpenFile,
+  actions: TuiActions
+): Promise<boolean> {
+  try {
+    const newContent = await Deno.readTextFile(openFile.path);
+
+    if (newContent === openFile.originalContent) {
+      actions.setStatusMessage("No changes to import");
+      return false;
+    }
+
+    switch (openFile.type) {
+      case "plan":
+        actions.savePlanMarkdown(newContent);
+        actions.setStatusMessage("Plan imported");
+        break;
+      case "step":
+        actions.saveStepDescription(openFile.index ?? 0, newContent.trim());
+        actions.setStatusMessage("Step imported");
+        break;
+      case "crumb":
+        actions.saveCrumbSummary(openFile.index ?? 0, newContent.trim());
+        actions.setStatusMessage("Crumb imported");
+        break;
+    }
+
+    // Clean up temp file after successful import
+    try {
+      await Deno.remove(openFile.path);
+      // Try to remove the temp directory too
+      const dir = openFile.path.substring(0, openFile.path.lastIndexOf("/"));
+      await Deno.remove(dir);
+    } catch {
+      // Ignore cleanup errors
+    }
+
+    return true;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    actions.setStatusMessage(`Import failed: ${message}`);
+    return false;
+  }
 }
 
 /**
@@ -48,14 +160,26 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
   const state = createTuiState();
   const actions = createTuiActions(state);
 
-  // Load initial data
+  // Load initial data - delay slightly to allow Computed dependency tracking to complete
+  // (deno_tui's Computed signals register dependencies asynchronously via trackDependencies())
+  await new Promise((resolve) => setTimeout(resolve, 10));
   actions.loadThreads();
 
-  // Signal for pending edit requests (to handle outside TUI event loop)
-  const pendingEdit = new Signal<EditRequest | null>(null);
+  // Track currently open file for import
+  let currentOpenFile: OpenFile | null = null;
 
-  // Main loop - supports TUI restart after editor sessions
-  while (!state.shouldQuit.value) {
+  // Ensure terminal is restored on exit
+  const cleanup = () => {
+    restoreTerminal();
+  };
+
+  // Handle Ctrl+C at process level
+  Deno.addSignalListener("SIGINT", () => {
+    cleanup();
+    Deno.exit(0);
+  });
+
+  try {
     // Create and run TUI
     const tui = new Tui({
       style: crayon.bgBlack,
@@ -105,7 +229,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     });
 
     // Handle keybindings
-    tui.on("keyPress", (event) => {
+    tui.on("keyPress", async (event) => {
       // Quit on 'q' or Ctrl+C
       if (event.key === "q" || (event.ctrl && event.key === "c")) {
         actions.quit();
@@ -132,15 +256,49 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         return;
       }
 
-      // Edit key 'e' - trigger external editor based on focused pane
-      if (event.key === "e") {
+      // 'o' key - Open in external app
+      if (event.key === "o") {
         const pane = state.focusedPane.value;
+        let content: string | null = null;
+        let type: "plan" | "step" | "crumb" = "plan";
+        let index: number | undefined;
+
         if (pane === "plan") {
-          pendingEdit.value = { type: "plan" };
+          content = actions.getPlanMarkdown();
+          type = "plan";
         } else if (pane === "steps") {
-          pendingEdit.value = { type: "step", index: state.selectedStepIndex.value };
+          index = state.selectedStepIndex.value;
+          content = actions.getStepDescription(index);
+          type = "step";
         } else if (pane === "crumbs") {
-          pendingEdit.value = { type: "crumb", index: state.selectedCrumbIndex.value };
+          index = state.selectedCrumbIndex.value;
+          content = actions.getCrumbSummary(index);
+          type = "crumb";
+        }
+
+        if (content) {
+          const openFile = await openInExternalApp(content, type, index);
+          if (openFile) {
+            currentOpenFile = openFile;
+            actions.setStatusMessage(`Opened ${type} - press 'i' to import changes`);
+          } else {
+            actions.setStatusMessage("Failed to open file");
+          }
+        } else {
+          actions.setStatusMessage("Nothing to open");
+        }
+        return;
+      }
+
+      // 'i' key - Import from open file
+      if (event.key === "i") {
+        if (currentOpenFile) {
+          const imported = await importOpenFile(currentOpenFile, actions);
+          if (imported) {
+            currentOpenFile = null;
+          }
+        } else {
+          actions.setStatusMessage("No file open - press 'o' to open first");
         }
         return;
       }
@@ -152,82 +310,27 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     // Run the TUI
     tui.run();
 
-    // Wait for quit signal or edit request
+    // Wait for quit signal
     await new Promise<void>((resolve) => {
       const checkStatus = setInterval(() => {
-        if (state.shouldQuit.value || pendingEdit.value !== null) {
+        if (state.shouldQuit.value) {
           clearInterval(checkStatus);
           resolve();
         }
       }, 50);
     });
 
-    // Clean up TUI
+    // Clean up TUI components
     cleanupStatusBar();
     cleanupDetailPanel();
     cleanupThreadList();
     cleanupTabBar();
+
+    // Destroy TUI
     tui.destroy();
-
-    // Handle edit request if present
-    if (pendingEdit.value !== null && !state.shouldQuit.value) {
-      const edit = pendingEdit.value;
-      pendingEdit.value = null;
-
-      await handleEditRequest(edit, state, actions);
-    }
-  }
-}
-
-/**
- * Handle an edit request by opening external editor.
- */
-async function handleEditRequest(
-  edit: EditRequest,
-  state: TuiState,
-  actions: TuiActions
-): Promise<void> {
-  let content: string | null = null;
-  let suffix = ".md";
-
-  // Get content to edit
-  switch (edit.type) {
-    case "plan":
-      content = actions.getPlanMarkdown();
-      suffix = ".md";
-      break;
-    case "step":
-      content = actions.getStepDescription(edit.index ?? 0);
-      suffix = ".txt";
-      break;
-    case "crumb":
-      content = actions.getCrumbSummary(edit.index ?? 0);
-      suffix = ".txt";
-      break;
-  }
-
-  if (content === null) {
-    return;
-  }
-
-  // Open editor
-  const result = await editInExternalEditor(content, suffix);
-
-  // Save if changed
-  if (result.changed && result.content !== null) {
-    switch (edit.type) {
-      case "plan":
-        actions.savePlanMarkdown(result.content);
-        break;
-      case "step":
-        actions.saveStepDescription(edit.index ?? 0, result.content.trim());
-        break;
-      case "crumb":
-        actions.saveCrumbSummary(edit.index ?? 0, result.content.trim());
-        break;
-    }
-  } else if (result.error) {
-    actions.setStatusMessage(`Edit failed: ${result.error}`);
+  } finally {
+    // Always restore terminal on exit
+    cleanup();
   }
 }
 
@@ -294,7 +397,7 @@ function handlePaneKeyPress(
       break;
 
     case "plan":
-      // Plan pane handled by 'e' key above
+      // Plan pane - 'o' to open handled above
       break;
   }
 }
