@@ -26,17 +26,47 @@ function resolveSchemaPath(): string {
 }
 
 /**
- * Finds the project root by searching up for a .claude directory.
- * @returns The directory containing .claude, or null if not found
+ * Finds the project root by searching up for a .claude directory with a blackboard.db.
+ * Stops at git repo root to avoid finding user-level ~/.claude directory.
+ * @returns The directory containing .claude/blackboard.db, or null if not found
  */
 function findProjectRoot(startDir: string): string | null {
   let current = startDir;
+  let gitRoot: string | null = null;
+
+  // First, find the git root (if any)
+  let searchDir = startDir;
+  while (searchDir !== "/") {
+    if (existsSync(join(searchDir, ".git"))) {
+      gitRoot = searchDir;
+      break;
+    }
+    searchDir = dirname(searchDir);
+  }
+
+  // Search for .claude/blackboard.db, but stop at git root or filesystem root
   while (current !== "/") {
-    if (existsSync(join(current, ".claude"))) {
+    const claudeDir = join(current, ".claude");
+    const dbFile = join(claudeDir, "blackboard.db");
+    if (existsSync(claudeDir) && existsSync(dbFile)) {
       return current;
+    }
+    // Stop if we've reached the git root - don't look beyond project boundary
+    if (gitRoot && current === gitRoot) {
+      break;
     }
     current = dirname(current);
   }
+
+  // If we have a git root, check it directly (even if loop ended early)
+  if (gitRoot) {
+    const claudeDir = join(gitRoot, ".claude");
+    const dbFile = join(claudeDir, "blackboard.db");
+    if (existsSync(claudeDir) && existsSync(dbFile)) {
+      return gitRoot;
+    }
+  }
+
   return null;
 }
 
