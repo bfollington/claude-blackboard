@@ -463,6 +463,49 @@ export function getOpenBugReports(limit = 10): BugReport[] {
   return stmt.all({ limit }) as BugReport[];
 }
 
+/**
+ * Lists all bug reports with optional status filter.
+ *
+ * @param status - Optional status filter
+ * @param limit - Maximum number of bug reports to return (default: 20)
+ * @returns Array of bug reports ordered by created_at DESC
+ */
+export function listBugReports(status?: BugReportStatus, limit = 20): BugReport[] {
+  const db = getDb();
+  if (status) {
+    const stmt = db.prepare(`
+      SELECT * FROM bug_reports
+      WHERE status = :status
+      ORDER BY created_at DESC
+      LIMIT :limit
+    `);
+    return stmt.all({ status, limit }) as BugReport[];
+  } else {
+    const stmt = db.prepare(`
+      SELECT * FROM bug_reports
+      ORDER BY created_at DESC
+      LIMIT :limit
+    `);
+    return stmt.all({ limit }) as BugReport[];
+  }
+}
+
+/**
+ * Updates a bug report's status.
+ *
+ * @param id - Bug report ID
+ * @param status - New status value
+ */
+export function updateBugReportStatus(id: string, status: BugReportStatus): void {
+  const db = getDb();
+  const stmt = db.prepare(`
+    UPDATE bug_reports
+    SET status = :status
+    WHERE id = :id
+  `);
+  stmt.run({ id, status });
+}
+
 // ============================================================================
 // Reflections
 // ============================================================================

@@ -4,7 +4,7 @@
  */
 
 import { Text, Box } from "https://deno.land/x/tui@2.1.11/src/components/mod.ts";
-import { Computed } from "https://deno.land/x/tui@2.1.11/src/signals/mod.ts";
+import { Computed, Signal } from "https://deno.land/x/tui@2.1.11/src/signals/mod.ts";
 import { crayon } from "https://deno.land/x/crayon@3.3.3/mod.ts";
 import type { Tui } from "https://deno.land/x/tui@2.1.11/mod.ts";
 import type { TuiState } from "../state.ts";
@@ -51,43 +51,57 @@ export function createTabBar(options: TabBarOptions): () => void {
   });
   components.push(bar);
 
-  // Create each tab
+  // Create each tab - we need to recreate tabs when active tab changes
+  // since deno_tui doesn't support dynamic theme changes
   let column = 1;
+  const tabComponents: Text[] = [];
+  const tabPositions: { column: number; width: number; tab: TabConfig }[] = [];
+
+  // Calculate positions first
   for (const tab of TABS) {
-    const isActive = new Computed(() => state.activeTab.value === tab.id);
-
-    // Tab text with dynamic styling based on active state
     const tabLabel = `[${tab.shortcut}] ${tab.label}`;
-
-    // We style the text via the theme, using base for the current style
-    const tabTheme = new Computed(() => {
-      if (isActive.value) {
-        return { base: crayon.bgWhite.black.bold };
-      }
-      return { base: crayon.bgBlack.white };
-    });
-
-    const text = new Text({
-      parent: tui,
-      text: ` ${tabLabel} `,
-      theme: tabTheme.value,
-      rectangle: {
-        column,
-        row,
-      },
-      zIndex: 2,
-    });
-    components.push(text);
-
-    // Update theme when active state changes
-    isActive.subscribe(() => {
-      // deno_tui Text doesn't easily support dynamic theme changes
-      // For now, we'll accept that tabs won't update dynamically
-      // A full solution would require recreating the Text components
-    });
-
-    column += tabLabel.length + 3; // +3 for padding spaces
+    const width = tabLabel.length + 2; // +2 for padding spaces
+    tabPositions.push({ column, width, tab });
+    column += width + 1; // +1 for gap between tabs
   }
+
+  // Function to create/recreate tab text components
+  const renderTabs = () => {
+    // Destroy existing tab components
+    for (const comp of tabComponents) {
+      comp.destroy();
+      const idx = components.indexOf(comp);
+      if (idx !== -1) components.splice(idx, 1);
+    }
+    tabComponents.length = 0;
+
+    // Create new tab components with current styling
+    for (const { column: col, tab } of tabPositions) {
+      const isActive = state.activeTab.value === tab.id;
+      const tabLabel = `[${tab.shortcut}] ${tab.label}`;
+      const theme = isActive
+        ? { base: crayon.bgWhite.black.bold }
+        : { base: crayon.bgBlack.white };
+
+      const text = new Text({
+        parent: tui,
+        text: ` ${tabLabel} `,
+        theme,
+        rectangle: { column: col, row },
+        zIndex: 2,
+      });
+      tabComponents.push(text);
+      components.push(text);
+    }
+  };
+
+  // Initial render
+  renderTabs();
+
+  // Re-render tabs when active tab changes
+  state.activeTab.subscribe(() => {
+    renderTabs();
+  });
 
   // Title on the right side
   const titleText = "blackboard";
