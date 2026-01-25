@@ -6,7 +6,7 @@
 import { readStdin } from "../utils/stdin.ts";
 import { generateId } from "../utils/id.ts";
 import { dbExists } from "../db/schema.ts";
-import { getActivePlan, replaceStepsForPlan, updatePlanStatus } from "../db/queries.ts";
+import { getActivePlan, mergeStepsForPlan, updatePlanStatus } from "../db/queries.ts";
 import type { StepStatus } from "../types/schema.ts";
 
 interface TodoItem {
@@ -33,7 +33,7 @@ interface PostToolUseInput {
  * - Verifies tool_name === "TodoWrite", exits if not
  * - Gets active plan, exits if none
  * - Extracts todos from tool_input.todos
- * - Replaces all steps for plan (using replaceStepsForPlan)
+ * - Merges steps for plan (using mergeStepsForPlan, preserves completed steps)
  * - Updates plan status based on completion
  * - Outputs PostToolUseOutput with sync summary
  */
@@ -59,6 +59,7 @@ export async function captureTodo(): Promise<void> {
   // Extract todos from tool_input
   const todos = input.tool_input?.todos ?? input.tool_input?.items ?? [];
 
+  // Skip merge if incoming list is empty to avoid clearing pending steps
   if (todos.length === 0) {
     Deno.exit(0);
   }
@@ -83,8 +84,8 @@ export async function captureTodo(): Promise<void> {
     };
   });
 
-  // Replace all steps for this plan
-  replaceStepsForPlan(plan.id, steps);
+  // Merge steps for this plan (preserves completed/failed/skipped steps)
+  const mergeResult = mergeStepsForPlan(plan.id, steps);
 
   // Count completed vs total
   const completedCount = steps.filter((s) => s.status === "completed").length;
@@ -99,13 +100,13 @@ export async function captureTodo(): Promise<void> {
   }
   updatePlanStatus(plan.id, planStatus);
 
-  // Output sync summary
+  // Output sync summary with merge statistics
   console.log(
     JSON.stringify({
       hookSpecificOutput: {
         hookEventName: "PostToolUse",
         additionalContext:
-          `Synced ${totalCount} steps for plan ${plan.id} (${completedCount}/${totalCount} completed). Plan status: ${planStatus}.`,
+          `Merged steps: ${mergeResult.added} added, ${mergeResult.updated} updated, ${mergeResult.preserved} preserved. Plan status: ${planStatus}.`,
       },
     }),
   );

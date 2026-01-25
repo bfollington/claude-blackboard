@@ -34,6 +34,11 @@ import {
   farmCommand,
   dashboardCommand,
   workCommand,
+  stepListCommand,
+  stepAddCommand,
+  stepUpdateCommand,
+  stepRemoveCommand,
+  stepReorderCommand,
 } from "./commands/mod.ts";
 
 /**
@@ -78,6 +83,67 @@ const threadCommand = new Command()
   .option("-q, --quiet", "Suppress non-essential output")
   .action(async (options: { db?: string; quiet?: boolean }, name: string, file?: string) => {
     await threadPlanCommand(name, { ...options, file });
+  });
+
+/**
+ * Step subcommand group - manage plan steps.
+ */
+const stepCommand = new Command()
+  .description("Manage plan steps")
+  .action(() => {
+    console.log("Step subcommand - use one of the available commands:");
+    console.log("  list [thread-or-plan]  List steps for a plan");
+    console.log("  add <description>      Add a new step");
+    console.log("  update <step-id>       Update step status or description");
+    console.log("  remove <step-id>       Remove a step");
+    console.log("  reorder <step-id>      Reorder a step to a new position");
+  })
+  .command("list", "List steps for a thread or plan")
+  .arguments("[thread-or-plan:string]")
+  .option("--status <status:string>", "Filter by status (pending|in_progress|completed|failed|skipped)")
+  .action(async (options: { status?: string }, threadOrPlan?: string) => {
+    const listOptions = {
+      status: options.status as "pending" | "in_progress" | "completed" | "failed" | "skipped" | undefined,
+    };
+    await stepListCommand(threadOrPlan, listOptions);
+  })
+  .reset()
+  .command("add", "Add a new step to the current thread's plan")
+  .arguments("<description:string>")
+  .option("--status <status:string>", "Step status (default: pending)")
+  .option("--position <n:number>", "Insert at specific position (1-indexed)")
+  .action(async (options: { status?: string; position?: number }, description: string) => {
+    const addOptions = {
+      status: options.status as "pending" | "in_progress" | "completed" | "failed" | "skipped" | undefined,
+      position: options.position,
+    };
+    await stepAddCommand(description, addOptions);
+  })
+  .reset()
+  .command("update", "Update a step's status or description")
+  .arguments("<step-id:string>")
+  .option("--status <status:string>", "New status")
+  .option("--description <text:string>", "New description")
+  .action(async (options: { status?: string; description?: string }, stepId: string) => {
+    const updateOptions = {
+      status: options.status as "pending" | "in_progress" | "completed" | "failed" | "skipped" | undefined,
+      description: options.description,
+    };
+    await stepUpdateCommand(stepId, updateOptions);
+  })
+  .reset()
+  .command("remove", "Remove a step from a plan")
+  .arguments("<step-id:string>")
+  .option("--force", "Skip confirmation for completed steps")
+  .action(async (options: { force?: boolean }, stepId: string) => {
+    await stepRemoveCommand(stepId, options);
+  })
+  .reset()
+  .command("reorder", "Reorder a step to a new position")
+  .arguments("<step-id:string>")
+  .option("--position <n:number>", "New position (1-indexed)", { required: true })
+  .action(async (options: { position: number }, stepId: string) => {
+    await stepReorderCommand(stepId, options);
   });
 
 /**
@@ -288,6 +354,10 @@ export const cli = new Command()
 
   // Thread subcommand group
   .command("thread", threadCommand)
+  .reset()
+
+  // Step subcommand group
+  .command("step", stepCommand)
   .reset()
 
   // Hook subcommand group
