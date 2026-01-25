@@ -67,11 +67,17 @@ blackboard query "SELECT summary, issues FROM breadcrumbs WHERE plan_id='${plan.
 
 ### 4. Progress Tracking
 - Step status updates automatically when subagents complete
-- Use \`/crumb <summary>\` for manual progress notes
+- Use \`/crumb <summary>\` frequently to record progress notes
 - Use \`/oops <mistake>\` if you make a correctable error
 - Use \`/bug-report <title> --steps <repro>\` if blocked
 
-### 5. Completion
+### 5. Updating the Plan
+If you discover the plan needs adjustment (new steps, scope changes, blockers):
+- Use \`blackboard thread plan ${thread?.name || '<thread>'}\` to edit interactively
+- Or \`blackboard thread plan ${thread?.name || '<thread>'} <file.md>\` to update from file
+- Keeping the plan accurate helps future iterations and other workers
+
+### 6. Completion
 When all steps are done:
 1. Run \`/reflect\` to capture lessons learned
 2. The thread remains available for future sessions

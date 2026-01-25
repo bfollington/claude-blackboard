@@ -570,22 +570,30 @@ export function generateContextPacket(thread: Thread): string {
   lines.push(
     "1. **If no plan exists**: Enter planning mode, design the approach, exit plan mode. The plan will be stored automatically."
   );
+  lines.push("   - Or use `blackboard thread plan ${thread.name} <file.md>` to create from a file");
   lines.push("");
   lines.push("2. **If plan exists with pending steps**:");
   lines.push("   - Use the `blackboard:implementer` subagent to work on pending steps");
   lines.push("   - The implementer will record breadcrumbs as it works");
   lines.push("   - Steps are marked complete automatically when breadcrumbs reference them");
   lines.push("");
-  lines.push("3. **Recording progress**:");
-  lines.push("   - Use `/crumb <summary>` to record progress (auto-associates with current thread)");
+  lines.push("3. **Recording progress** (IMPORTANT):");
+  lines.push("   - Use `/crumb <summary>` frequently to record progress");
+  lines.push("   - Breadcrumbs persist across iterations and help track what was done");
   lines.push("   - Use `/oops <mistake>` if you make a correctable error");
   lines.push("   - Use `/bug-report <title> --steps <repro>` if blocked");
   lines.push("");
+  lines.push("4. **Updating the plan**:");
+  lines.push("   - If you discover the plan needs changes (new steps, scope changes, blockers):");
+  lines.push("   - Use `blackboard thread plan ${thread.name}` to edit interactively");
+  lines.push("   - Or `blackboard thread plan ${thread.name} <file.md>` to update from file");
+  lines.push("   - Keeping the plan accurate helps future iterations");
+  lines.push("");
   lines.push(
-    "4. **When stuck or session ending**: Use `/reflect` to capture learnings before context compaction."
+    "5. **When stuck or session ending**: Use `/reflect` to capture learnings before context compaction."
   );
   lines.push("");
-  lines.push("5. **Switching threads**: Invoke `/blackboard:thread <other-name>` to switch context.");
+  lines.push("6. **Switching threads**: Invoke `/blackboard:thread <other-name>` to switch context.");
   lines.push("");
   lines.push("Continue with the current thread now.");
 

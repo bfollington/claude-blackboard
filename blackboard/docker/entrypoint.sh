@@ -44,32 +44,62 @@ while [ $iteration -lt $MAX_ITERATIONS ]; do
   CONTEXT=$(blackboard --db "$DB_PATH" thread status "$THREAD_NAME" --json 2>/dev/null || echo '{"error": "failed to get context"}')
 
   # Build prompt from thread context
-  PROMPT="You are a worker executing thread '${THREAD_NAME}'. Here is your current context:
+  PROMPT="You are a worker executing thread '${THREAD_NAME}'. This is iteration ${iteration} of ${MAX_ITERATIONS}.
 
+## Current Context
 ${CONTEXT}
 
-Work on the next pending step(s). After completing work:
+## Your Workflow
 
-1. Mark completed steps:
-   blackboard --db ${DB_PATH} query \"UPDATE plan_steps SET status = 'completed' WHERE id = '<step_id>'\"
+Work on the next pending step(s). As you work:
 
-2. Record a breadcrumb summarizing what you did:
-   blackboard --db ${DB_PATH} crumb \"<summary>\" --agent worker --files \"<comma-separated files>\"
+### 1. Record Progress with Breadcrumbs (REQUIRED)
+After each significant action, record a breadcrumb:
+\`\`\`bash
+blackboard --db ${DB_PATH} crumb \"<what you did>\" --agent worker --files \"<files touched>\"
+\`\`\`
+Breadcrumbs help track progress across iterations and aid debugging.
 
-3. Commit your changes with a meaningful message:
-   git add <files you created/modified>
-   git commit -m \"[${THREAD_NAME}] <description of changes>\" --no-verify
+### 2. Update Step Status
+When completing a step:
+\`\`\`bash
+blackboard --db ${DB_PATH} query \"UPDATE plan_steps SET status = 'completed' WHERE id = '<step_id>'\"
+\`\`\`
 
-When ALL steps are genuinely complete, also run:
-   blackboard --db ${DB_PATH} query \"UPDATE plans SET status = 'completed' WHERE id = '<plan_id>'\"
+### 3. Update the Plan if Needed
+If you discover the plan needs adjustment (new steps, scope changes, blockers):
+\`\`\`bash
+# Write updated plan to a temp file, then:
+blackboard --db ${DB_PATH} thread plan ${THREAD_NAME} /tmp/updated-plan.md
+\`\`\`
+Keeping the plan accurate helps future iterations and other workers.
 
-Then output '${COMPLETION_PROMISE}'."
+### 4. Commit Your Changes
+\`\`\`bash
+git add <files>
+git commit -m \"[${THREAD_NAME}] <description>\" --no-verify
+\`\`\`
+
+### 5. Report Blockers
+If you hit a blocker that prevents progress:
+\`\`\`bash
+blackboard --db ${DB_PATH} bug-report \"<title>\" --steps \"<repro steps>\" --thread ${THREAD_NAME}
+\`\`\`
+
+## Completion
+When ALL steps are genuinely complete:
+\`\`\`bash
+blackboard --db ${DB_PATH} query \"UPDATE plans SET status = 'completed' WHERE id = '<plan_id>'\"
+\`\`\`
+Then output '${COMPLETION_PROMISE}'.
+
+Do NOT output the completion promise until all work is truly done."
 
   # Run Claude CLI
   RESULT=$(claude -p "$PROMPT" \
     --output-format json \
     --dangerously-skip-permissions \
-    --append-system-prompt "When all steps are genuinely complete, output '${COMPLETION_PROMISE}'. Do not output it prematurely." \
+    --append-system-prompt "IMPORTANT: Record breadcrumbs frequently using 'blackboard crumb' to track your progress. Update the plan with 'blackboard thread plan' if you discover it needs changes. When all steps are genuinely complete, output '${COMPLETION_PROMISE}'. Do not output it prematurely." \
     2>/dev/null) || {
     STATUS=$?
     # Rate limit handling with exponential backoff
