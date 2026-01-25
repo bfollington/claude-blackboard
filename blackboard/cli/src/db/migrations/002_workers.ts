@@ -32,7 +32,7 @@ export function migrate(db: Database): void {
         status TEXT DEFAULT 'running' CHECK(status IN ('running', 'completed', 'failed', 'killed')),
         last_heartbeat TEXT DEFAULT (datetime('now')),
         created_at TEXT DEFAULT (datetime('now')),
-        auth_mode TEXT CHECK(auth_mode IN ('env', 'config')),
+        auth_mode TEXT CHECK(auth_mode IN ('env', 'config', 'oauth')),
         iteration INTEGER DEFAULT 0,
         max_iterations INTEGER DEFAULT 50
       );

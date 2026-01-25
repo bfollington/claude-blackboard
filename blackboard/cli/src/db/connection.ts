@@ -9,6 +9,7 @@ import { dirname, fromFileUrl, join } from "jsr:@std/path";
 import { existsSync } from "jsr:@std/fs";
 import { migrate as migrateThreads } from "./migrations/001_threads.ts";
 import { migrate as migrateWorkers } from "./migrations/002_workers.ts";
+import { migrate as migrateOAuthAuthMode } from "./migrations/003_oauth_auth_mode.ts";
 
 let dbInstance: Database | null = null;
 
@@ -119,6 +120,7 @@ export function getDb(path?: string): Database {
   try {
     migrateThreads(dbInstance);
     migrateWorkers(dbInstance);
+    migrateOAuthAuthMode(dbInstance);
   } catch {
     // Migrations are idempotent - errors mean already migrated
   }
