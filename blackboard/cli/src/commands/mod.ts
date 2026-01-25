@@ -32,3 +32,4 @@ export {
   stepRemoveCommand,
   stepReorderCommand,
 } from "./step.ts";
+export { initWorkerCommand } from "./init-worker.ts";
