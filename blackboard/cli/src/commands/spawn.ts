@@ -14,6 +14,7 @@ import {
   type ContainerOptions,
 } from "../docker/client.ts";
 import { generateId } from "../utils/id.ts";
+import { extractAndValidateOAuthToken } from "../utils/oauth.ts";
 
 export interface SpawnOptions {
   db?: string;
@@ -122,17 +123,62 @@ export async function spawnCommand(
   const dbPath = resolveDbPath();
   const dbDir = dirname(dbPath);
 
-  // 6. Determine auth mode
-  const authMode = (options.auth || "env") as "env" | "config";
+  // 6. Determine auth mode with auto-detection
+  let authMode: "env" | "config" | "oauth";
+  let oauthToken: string | undefined;
 
-  // If auth mode is env and no api key provided, check environment
-  if (authMode === "env" && !options.apiKey) {
-    const envKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!envKey) {
+  if (options.auth === "oauth") {
+    // Explicit --auth oauth: require OAuth, fail if not available
+    const oauthResult = await extractAndValidateOAuthToken(options.quiet);
+    if (!oauthResult) {
+      console.error("Error: OAuth authentication not available.");
+      console.error("Run 'claude login' or 'claude setup-token' to authenticate.");
+      Deno.exit(1);
+    }
+    authMode = "oauth";
+    oauthToken = oauthResult.token;
+    if (!options.quiet) {
+      console.log("Using OAuth authentication from Claude Code session");
+    }
+  } else if (options.auth === "env") {
+    // Explicit --auth env: require API key
+    const apiKey = options.apiKey || Deno.env.get("ANTHROPIC_API_KEY");
+    if (!apiKey) {
       console.error(
         "Error: --auth env requires ANTHROPIC_API_KEY environment variable or --api-key flag"
       );
       Deno.exit(1);
+    }
+    authMode = "env";
+  } else if (options.auth === "config") {
+    // Explicit --auth config: mount ~/.claude directory
+    authMode = "config";
+  } else {
+    // Auto-detection: try OAuth first, then fall back to API key
+    const oauthResult = await extractAndValidateOAuthToken(true); // quiet mode for auto-detect
+    if (oauthResult) {
+      authMode = "oauth";
+      oauthToken = oauthResult.token;
+      if (!options.quiet) {
+        console.log("Auto-detected OAuth authentication from Claude Code session");
+      }
+    } else {
+      // Fall back to API key
+      const apiKey = options.apiKey || Deno.env.get("ANTHROPIC_API_KEY");
+      if (apiKey) {
+        authMode = "env";
+        if (!options.quiet) {
+          console.log("Using API key authentication");
+        }
+      } else {
+        console.error("Error: No authentication method available.");
+        console.error("");
+        console.error("Options:");
+        console.error("  1. Run 'claude login' to authenticate with OAuth (recommended for Pro/Max)");
+        console.error("  2. Set ANTHROPIC_API_KEY environment variable");
+        console.error("  3. Use --api-key flag");
+        Deno.exit(1);
+      }
     }
   }
 
@@ -148,6 +194,7 @@ export async function spawnCommand(
     repoDir: options.repo || Deno.cwd(),
     authMode,
     apiKey: options.apiKey,
+    oauthToken,
     maxIterations: options.maxIterations || 50,
     memory: options.memory || "512m",
     workerId,

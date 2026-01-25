@@ -22,6 +22,7 @@ import {
   type ContainerOptions,
 } from "../docker/client.ts";
 import { generateId } from "../utils/id.ts";
+import { extractAndValidateOAuthToken } from "../utils/oauth.ts";
 import type { Thread } from "../types/schema.ts";
 
 export interface FarmOptions {
@@ -52,17 +53,26 @@ interface FarmStats {
 }
 
 /**
+ * Resolved authentication configuration.
+ * Extracted once at farm startup and reused for all workers.
+ */
+interface ResolvedAuth {
+  authMode: "env" | "config" | "oauth";
+  oauthToken?: string;
+}
+
+/**
  * Spawn a single worker for a thread.
  * Returns worker ID on success, null on failure.
  */
 async function spawnWorker(
   thread: Thread,
   options: FarmOptions,
-  dbDir: string
+  dbDir: string,
+  resolvedAuth: ResolvedAuth
 ): Promise<string | null> {
   const workerId = generateId();
   const imageName = options.image || "blackboard-worker:latest";
-  const authMode = (options.auth || "env") as "env" | "config";
 
   if (!options.quiet) {
     console.log(`  Spawning worker for thread "${thread.name}" (${workerId.substring(0, 8)})`);
@@ -73,8 +83,9 @@ async function spawnWorker(
     threadName: thread.name,
     dbDir,
     repoDir: options.repo || Deno.cwd(),
-    authMode,
+    authMode: resolvedAuth.authMode,
     apiKey: options.apiKey,
+    oauthToken: resolvedAuth.oauthToken,
     maxIterations: options.maxIterations || 50,
     memory: options.memory || "512m",
     workerId,
@@ -96,7 +107,7 @@ async function spawnWorker(
       container_id: containerId,
       thread_id: thread.id,
       status: "running",
-      auth_mode: authMode,
+      auth_mode: resolvedAuth.authMode,
       iteration: 0,
       max_iterations: options.maxIterations || 50,
     });
@@ -276,15 +287,59 @@ export async function farmCommand(options: FarmOptions): Promise<void> {
     }
   }
 
-  // 5. Validate auth configuration
-  const authMode = options.auth || "env";
-  if (authMode === "env" && !options.apiKey) {
-    const envKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!envKey) {
+  // 5. Resolve auth configuration (once, reused for all workers)
+  let resolvedAuth: ResolvedAuth;
+
+  if (options.auth === "oauth") {
+    // Explicit --auth oauth: require OAuth, fail if not available
+    const oauthResult = await extractAndValidateOAuthToken(options.quiet);
+    if (!oauthResult) {
+      console.error("Error: OAuth authentication not available.");
+      console.error("Run 'claude login' or 'claude setup-token' to authenticate.");
+      Deno.exit(1);
+    }
+    resolvedAuth = { authMode: "oauth", oauthToken: oauthResult.token };
+    if (!options.quiet) {
+      console.log("Using OAuth authentication from Claude Code session");
+    }
+  } else if (options.auth === "env") {
+    // Explicit --auth env: require API key
+    const apiKey = options.apiKey || Deno.env.get("ANTHROPIC_API_KEY");
+    if (!apiKey) {
       console.error(
         "Error: --auth env requires ANTHROPIC_API_KEY environment variable or --api-key flag"
       );
       Deno.exit(1);
+    }
+    resolvedAuth = { authMode: "env" };
+  } else if (options.auth === "config") {
+    // Explicit --auth config: mount ~/.claude directory
+    resolvedAuth = { authMode: "config" };
+  } else {
+    // Auto-detection: try OAuth first, then fall back to API key
+    const oauthResult = await extractAndValidateOAuthToken(true); // quiet mode for auto-detect
+    if (oauthResult) {
+      resolvedAuth = { authMode: "oauth", oauthToken: oauthResult.token };
+      if (!options.quiet) {
+        console.log("Auto-detected OAuth authentication from Claude Code session");
+      }
+    } else {
+      // Fall back to API key
+      const apiKey = options.apiKey || Deno.env.get("ANTHROPIC_API_KEY");
+      if (apiKey) {
+        resolvedAuth = { authMode: "env" };
+        if (!options.quiet) {
+          console.log("Using API key authentication");
+        }
+      } else {
+        console.error("Error: No authentication method available.");
+        console.error("");
+        console.error("Options:");
+        console.error("  1. Run 'claude login' to authenticate with OAuth (recommended for Pro/Max)");
+        console.error("  2. Set ANTHROPIC_API_KEY environment variable");
+        console.error("  3. Use --api-key flag");
+        Deno.exit(1);
+      }
     }
   }
 
@@ -315,7 +370,7 @@ export async function farmCommand(options: FarmOptions): Promise<void> {
   // 7. Spawn initial batch of workers
   while (workQueue.length > 0 && stats.active < concurrency) {
     const item = workQueue.shift()!;
-    const workerId = await spawnWorker(item.thread, options, dbDir);
+    const workerId = await spawnWorker(item.thread, options, dbDir, resolvedAuth);
 
     if (workerId) {
       stats.active++;
@@ -415,7 +470,7 @@ export async function farmCommand(options: FarmOptions): Promise<void> {
     // Spawn more workers if we have capacity and work
     while (workQueue.length > 0 && stats.active < concurrency) {
       const item = workQueue.shift()!;
-      const workerId = await spawnWorker(item.thread, options, dbDir);
+      const workerId = await spawnWorker(item.thread, options, dbDir, resolvedAuth);
 
       if (workerId) {
         stats.active++;
