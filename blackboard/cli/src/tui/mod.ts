@@ -257,7 +257,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     updateFindInput();
 
     // Handle keybindings
-    tui.on("keyPress", (event) => {
+    tui.on("keyPress", async (event) => {
       // Check if find is active - find input handles its own keys
       const findActive = state.findState.value.isActive;
 
