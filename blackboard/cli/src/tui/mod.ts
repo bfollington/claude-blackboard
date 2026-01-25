@@ -16,6 +16,7 @@ import { createTabBar } from "./components/tab-bar.ts";
 import { createThreadList } from "./components/thread-list.ts";
 import { createDetailPanel } from "./components/detail-panel.ts";
 import { createStatusBar } from "./components/status-bar.ts";
+import { createFindInput } from "./components/find-input.ts";
 
 export interface TuiOptions {
   db?: string;
@@ -228,11 +229,69 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       width: terminalSize.columns,
     });
 
+    // Find input overlay (conditionally rendered based on state)
+    let cleanupFindInput: (() => void) | null = null;
+    const updateFindInput = () => {
+      if (state.findState.value.isActive && cleanupFindInput === null) {
+        cleanupFindInput = createFindInput({
+          tui,
+          state,
+          onQueryChange: (query) => actions.updateFindQuery(query),
+          onNext: () => actions.findNext(),
+          onPrevious: () => actions.findPrevious(),
+          onExit: () => actions.exitFind(),
+        });
+      } else if (!state.findState.value.isActive && cleanupFindInput !== null) {
+        cleanupFindInput();
+        cleanupFindInput = null;
+      }
+    };
+
+    // Watch for find state changes
+    const findStateUnsubscribe = state.findState.subscribe(() => {
+      updateFindInput();
+    });
+
+    // Initial check
+    updateFindInput();
+
     // Handle keybindings
-    tui.on("keyPress", async (event) => {
-      // Quit on 'q' or Ctrl+C
-      if (event.key === "q" || (event.ctrl && event.key === "c")) {
+    tui.on("keyPress", (event) => {
+      // Check if find is active - find input handles its own keys
+      const findActive = state.findState.value.isActive;
+
+      // Quit on 'q' or Ctrl+C (only if not in find mode)
+      if (!findActive && (event.key === "q" || (event.ctrl && event.key === "c"))) {
         actions.quit();
+        return;
+      }
+
+      // Start find mode with '/' (only if not already active)
+      if (!findActive && event.key === "/") {
+        actions.startFind();
+        return;
+      }
+
+      // Find navigation keys (only when not in find input mode)
+      if (!findActive && event.key === "n") {
+        actions.findNext();
+        return;
+      }
+      if (!findActive && event.key === "N") {
+        actions.findPrevious();
+        return;
+      }
+
+      // Exit find on Escape (even when not in input mode)
+      if (event.key === "escape") {
+        if (findActive) {
+          actions.exitFind();
+        }
+        return;
+      }
+
+      // Don't process other keys if find input is active
+      if (findActive) {
         return;
       }
 
@@ -320,7 +379,9 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       }, 50);
     });
 
-    // Clean up TUI components
+    // Clean up TUI
+    findStateUnsubscribe();
+    if (cleanupFindInput) cleanupFindInput();
     cleanupStatusBar();
     cleanupDetailPanel();
     cleanupThreadList();
