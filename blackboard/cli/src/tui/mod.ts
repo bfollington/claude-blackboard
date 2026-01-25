@@ -499,35 +499,39 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         return;
       }
 
-      // Worker operations (when focused on list pane)
-      if (!findActive && event.key === "w" && state.focusedPane.value === "list") {
+      // Worker operations (on threads tab, any pane)
+      if (event.key === "w" && !event.shift && state.activeTab.value === "threads") {
         const thread = state.selectedThread.value;
-        if (thread) {
-          if (thread.status !== "active" && thread.status !== "paused") {
-            actions.setStatusMessage("Can only spawn workers for active/paused threads");
-          } else {
-            actions.setStatusMessage("Spawning worker...");
-            // Use .catch() to handle async errors since we can't await in event handler
-            actions.spawnWorker(thread).catch((err) => {
-              actions.setStatusMessage(`Spawn error: ${err.message?.slice(0, 30) || err}`);
-            });
-          }
+        if (!thread) {
+          actions.setStatusMessage("No thread selected");
+        } else if (thread.status !== "active" && thread.status !== "paused") {
+          actions.setStatusMessage("Can only spawn workers for active/paused threads");
+        } else {
+          actions.setStatusMessage("Spawning worker...");
+          // Use .catch() to handle async errors since we can't await in event handler
+          actions.spawnWorker(thread).catch((err) => {
+            actions.setStatusMessage(`Spawn error: ${err.message?.slice(0, 30) || err}`);
+          });
         }
         return;
       }
 
-      // Kill worker with Shift+W (when focused on list pane)
-      if (!findActive && event.shift && event.key === "w" && state.focusedPane.value === "list") {
+      // Kill worker with Shift+W (on threads tab, any pane)
+      if (event.shift && event.key === "w" && state.activeTab.value === "threads") {
         const thread = state.selectedThread.value;
-        if (thread) {
+        if (!thread) {
+          actions.setStatusMessage("No thread selected");
+        } else {
           const workers = state.workersForSelectedThread.value;
           if (workers.length === 0) {
             actions.setStatusMessage("No active workers for this thread");
           } else if (workers.length === 1) {
+            actions.setStatusMessage("Killing worker...");
             actions.killWorker(workers[0].id).catch((err) => {
               actions.setStatusMessage(`Kill error: ${err.message?.slice(0, 30) || err}`);
             });
           } else {
+            actions.setStatusMessage(`Killing ${workers.length} workers...`);
             actions.killAllWorkersForThread(thread).catch((err) => {
               actions.setStatusMessage(`Kill error: ${err.message?.slice(0, 30) || err}`);
             });
