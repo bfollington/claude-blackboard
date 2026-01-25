@@ -6,3 +6,4 @@
 
 # Claude Code blackboard
 .claude/blackboard.db
+.test.env
