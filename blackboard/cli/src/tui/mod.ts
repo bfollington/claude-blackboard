@@ -472,7 +472,8 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       }
 
       // 'n' key: context-dependent (find next OR create new thread)
-      if (!findActive && event.key === "n") {
+      // Only handle here for threads tab - next-ups tab handles 'n' separately
+      if (!findActive && event.key === "n" && state.activeTab.value === "threads") {
         const findState = state.findState.value;
         // If there are find matches, 'n' navigates to next match
         if (findState.matches.length > 0) {
