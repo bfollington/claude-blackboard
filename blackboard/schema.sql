@@ -70,6 +70,18 @@ CREATE TABLE IF NOT EXISTS bug_reports (
     status TEXT DEFAULT 'open' CHECK(status IN ('open', 'resolved', 'wontfix'))
 );
 
+CREATE TABLE IF NOT EXISTS next_ups (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    is_template INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'archived', 'launched')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_launched_at TEXT,
+    launch_count INTEGER DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS workers (
     id TEXT PRIMARY KEY,
     container_id TEXT NOT NULL,
@@ -104,6 +116,8 @@ CREATE INDEX IF NOT EXISTS idx_threads_updated ON threads(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_threads_status ON threads(status);
 CREATE INDEX IF NOT EXISTS idx_threads_name ON threads(name);
 CREATE INDEX IF NOT EXISTS idx_plans_thread ON plans(thread_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_next_ups_status ON next_ups(status);
+CREATE INDEX IF NOT EXISTS idx_next_ups_updated ON next_ups(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_workers_status ON workers(status);
 CREATE INDEX IF NOT EXISTS idx_workers_thread ON workers(thread_id);
 CREATE INDEX IF NOT EXISTS idx_worker_logs_worker ON worker_logs(worker_id, timestamp DESC);

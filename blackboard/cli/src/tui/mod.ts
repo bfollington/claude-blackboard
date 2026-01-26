@@ -19,6 +19,8 @@ import { createStatusBar } from "./components/status-bar.ts";
 import { createFindInput } from "./components/find-input.ts";
 import { createThreadInput } from "./components/thread-input.ts";
 import { createBugList } from "./components/bug-list.ts";
+import { createNextUpsList } from "./components/next-ups-list.ts";
+import { createNextUpInput } from "./components/next-up-input.ts";
 import { createConfirmDialog } from "./components/confirm-dialog.ts";
 
 export interface TuiOptions {
@@ -184,6 +186,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
   // Track tab-specific cleanup functions
   let threadTabCleanups: Array<() => void> = [];
   let bugsTabCleanups: Array<() => void> = [];
+  let nextUpsTabCleanups: Array<() => void> = [];
 
   // Ensure terminal is restored on exit
   const cleanup = () => {
@@ -278,18 +281,52 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       bugsTabCleanups.push(cleanupBugList);
     };
 
+    const renderNextUpsTab = () => {
+      // Clean up any existing next-ups tab components
+      nextUpsTabCleanups.forEach(cleanup => cleanup());
+      nextUpsTabCleanups = [];
+
+      // Load next-ups
+      actions.loadNextUps();
+
+      // Next-ups list uses full width (no detail panel)
+      const cleanupNextUpsList = createNextUpsList({
+        tui,
+        state,
+        rectangle: {
+          column: 0,
+          row: 1,
+          width: terminalSize.columns,
+          height: terminalSize.rows - 2,
+        },
+      });
+
+      nextUpsTabCleanups.push(cleanupNextUpsList);
+    };
+
     // Subscribe to tab changes to switch components
     state.activeTab.subscribe((tab) => {
       if (tab === "threads") {
-        // Clean up bugs tab, render threads tab
+        // Clean up other tabs, render threads tab
         bugsTabCleanups.forEach(cleanup => cleanup());
         bugsTabCleanups = [];
+        nextUpsTabCleanups.forEach(cleanup => cleanup());
+        nextUpsTabCleanups = [];
         renderThreadsTab();
       } else if (tab === "bugs") {
-        // Clean up threads tab, render bugs tab
+        // Clean up other tabs, render bugs tab
         threadTabCleanups.forEach(cleanup => cleanup());
         threadTabCleanups = [];
+        nextUpsTabCleanups.forEach(cleanup => cleanup());
+        nextUpsTabCleanups = [];
         renderBugsTab();
+      } else if (tab === "next-ups") {
+        // Clean up other tabs, render next-ups tab
+        threadTabCleanups.forEach(cleanup => cleanup());
+        threadTabCleanups = [];
+        bugsTabCleanups.forEach(cleanup => cleanup());
+        bugsTabCleanups = [];
+        renderNextUpsTab();
       }
       // Note: reflections tab not implemented yet
     });
@@ -297,6 +334,8 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     // Initial render based on active tab
     if (state.activeTab.value === "bugs") {
       renderBugsTab();
+    } else if (state.activeTab.value === "next-ups") {
+      renderNextUpsTab();
     } else {
       renderThreadsTab();
     }
@@ -354,6 +393,32 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
 
     // Initial check
     updateThreadInput();
+
+    // Next-up input overlay (conditionally rendered based on state)
+    const nextUpInputCleanups: Array<() => void> = [];
+    const updateNextUpInput = () => {
+      if (state.isCreatingNextUp.value && nextUpInputCleanups.length === 0) {
+        const cleanup = createNextUpInput({
+          tui,
+          state,
+          onTitleChange: (title) => actions.updateNewNextUpTitle(title),
+          onConfirm: () => actions.confirmCreateNextUp(),
+          onCancel: () => actions.cancelCreateNextUp(),
+        });
+        nextUpInputCleanups.push(cleanup);
+      } else if (!state.isCreatingNextUp.value && nextUpInputCleanups.length > 0) {
+        const cleanup = nextUpInputCleanups.pop();
+        cleanup?.();
+      }
+    };
+
+    // Watch for next-up creation state changes
+    state.isCreatingNextUp.subscribe(() => {
+      updateNextUpInput();
+    });
+
+    // Initial check
+    updateNextUpInput();
 
     // Confirmation dialog overlay (conditionally rendered based on state)
     const confirmDialogCleanups: Array<() => void> = [];
@@ -447,7 +512,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         return;
       }
 
-      // Tab switching: 1, 2, 3
+      // Tab switching: 1, 2, 3, 4
       if (event.key === "1") {
         actions.switchTab("threads");
         return;
@@ -458,6 +523,10 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       }
       if (event.key === "3") {
         actions.switchTab("reflections");
+        return;
+      }
+      if (event.key === "4") {
+        actions.switchTab("next-ups");
         return;
       }
 
@@ -601,6 +670,62 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         return; // Don't process other keys when on bugs tab
       }
 
+      // Next-ups tab navigation and actions
+      if (state.activeTab.value === "next-ups") {
+        const isDown = event.key === "j" || event.key === "down";
+        const isUp = event.key === "k" || event.key === "up";
+
+        if (isDown) { actions.moveNextUpSelection(1); return; }
+        if (isUp) { actions.moveNextUpSelection(-1); return; }
+
+        // Create new next-up with 'n'
+        if (event.key === "n") {
+          actions.startCreateNextUp();
+          return;
+        }
+
+        // Launch next-up as thread with Enter or 'l'
+        if (event.key === "return" || event.key === "l") {
+          const nextUp = state.selectedNextUp.value;
+          if (nextUp) {
+            actions.setStatusMessage("Launching next-up as thread...");
+            actions.launchNextUpAsThread().catch((err) => {
+              actions.setStatusMessage(`Launch error: ${err.message?.slice(0, 30) || err}`);
+            });
+          }
+          return;
+        }
+
+        // Toggle template status with 't'
+        if (event.key === "t") {
+          actions.toggleNextUpTemplate();
+          return;
+        }
+
+        // Archive next-up with 'a'
+        if (event.key === "a") {
+          actions.archiveNextUpItem();
+          return;
+        }
+
+        // Delete next-up with 'd'
+        if (event.key === "d") {
+          actions.deleteNextUpItem();
+          return;
+        }
+
+        // Edit next-up content with 'o'
+        if (event.key === "o") {
+          actions.setStatusMessage("Opening editor...");
+          actions.editNextUpContent().catch((err) => {
+            actions.setStatusMessage(`Edit error: ${err.message?.slice(0, 30) || err}`);
+          });
+          return;
+        }
+
+        return; // Don't process other keys when on next-ups tab
+      }
+
       // Navigation and actions based on focused pane (threads tab only)
       handlePaneKeyPress(event, state, actions);
     });
@@ -621,10 +746,12 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     // Clean up TUI
     findInputCleanups.pop()?.();
     threadInputCleanups.pop()?.();
+    nextUpInputCleanups.pop()?.();
     confirmDialogCleanups.pop()?.();
     cleanupStatusBar();
     threadTabCleanups.forEach(cleanup => cleanup());
     bugsTabCleanups.forEach(cleanup => cleanup());
+    nextUpsTabCleanups.forEach(cleanup => cleanup());
     cleanupTabBar();
 
     // Clear refresh interval

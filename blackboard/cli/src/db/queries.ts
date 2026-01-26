@@ -12,10 +12,12 @@ import type {
   BugReport,
   Reflection,
   Thread,
+  NextUp,
   PlanStatus,
   StepStatus,
   BugReportStatus,
   ThreadStatus,
+  NextUpStatus,
 } from "../types/schema.ts";
 
 // ============================================================================
@@ -728,6 +730,185 @@ export function updateBugReportStatus(id: string, status: BugReportStatus): void
     WHERE id = :id
   `);
   stmt.run({ id, status });
+}
+
+// ============================================================================
+// Next-Ups
+// ============================================================================
+
+/**
+ * Lists active next-ups, ordered by most recently updated.
+ *
+ * @param includeArchived - Whether to include archived/launched next-ups (default: false)
+ * @returns Array of next-ups
+ */
+export function listNextUps(includeArchived = false): NextUp[] {
+  const db = getDb();
+  if (includeArchived) {
+    const stmt = db.prepare(`
+      SELECT * FROM next_ups
+      ORDER BY updated_at DESC
+    `);
+    return stmt.all() as NextUp[];
+  } else {
+    const stmt = db.prepare(`
+      SELECT * FROM next_ups
+      WHERE status = 'active'
+      ORDER BY updated_at DESC
+    `);
+    return stmt.all() as NextUp[];
+  }
+}
+
+/**
+ * Inserts a new next-up.
+ *
+ * @param nextUp - Next-up object to insert (without id, created_at, updated_at, last_launched_at, launch_count)
+ * @returns The ID of the newly created next-up
+ */
+export function insertNextUp(
+  nextUp: Omit<NextUp, 'id' | 'created_at' | 'updated_at' | 'last_launched_at' | 'launch_count'>
+): string {
+  const db = getDb();
+  const id = crypto.randomUUID();
+  const stmt = db.prepare(`
+    INSERT INTO next_ups (id, title, content, is_template, status)
+    VALUES (:id, :title, :content, :is_template, :status)
+  `);
+  stmt.run({
+    id,
+    title: nextUp.title,
+    content: nextUp.content,
+    is_template: nextUp.is_template,
+    status: nextUp.status,
+  });
+  return id;
+}
+
+/**
+ * Updates a next-up's title, content, and/or template status.
+ *
+ * @param id - Next-up ID
+ * @param updates - Fields to update
+ */
+export function updateNextUp(
+  id: string,
+  updates: { title?: string; content?: string; is_template?: number }
+): void {
+  const db = getDb();
+  const setClauses: string[] = ["updated_at = datetime('now')"];
+  const params: Record<string, string | number> = { id };
+
+  if (updates.title !== undefined) {
+    setClauses.push("title = :title");
+    params.title = updates.title;
+  }
+  if (updates.content !== undefined) {
+    setClauses.push("content = :content");
+    params.content = updates.content;
+  }
+  if (updates.is_template !== undefined) {
+    setClauses.push("is_template = :is_template");
+    params.is_template = updates.is_template;
+  }
+
+  const stmt = db.prepare(`
+    UPDATE next_ups
+    SET ${setClauses.join(", ")}
+    WHERE id = :id
+  `);
+  stmt.run(params);
+}
+
+/**
+ * Archives a next-up (sets status to 'archived').
+ *
+ * @param id - Next-up ID
+ */
+export function archiveNextUp(id: string): void {
+  const db = getDb();
+  const stmt = db.prepare(`
+    UPDATE next_ups
+    SET status = 'archived', updated_at = datetime('now')
+    WHERE id = :id
+  `);
+  stmt.run({ id });
+}
+
+/**
+ * Marks a next-up as launched and updates launch metrics.
+ * For templates: increments launch_count and updates last_launched_at.
+ * For non-templates: sets status to 'launched'.
+ *
+ * @param id - Next-up ID
+ */
+export function launchNextUp(id: string): void {
+  const db = getDb();
+
+  // Get the next-up to check if it's a template
+  const nextUp = getNextUpById(id);
+  if (!nextUp) return;
+
+  if (nextUp.is_template) {
+    // Template: increment launch_count and update last_launched_at
+    const stmt = db.prepare(`
+      UPDATE next_ups
+      SET launch_count = launch_count + 1,
+          last_launched_at = datetime('now'),
+          updated_at = datetime('now')
+      WHERE id = :id
+    `);
+    stmt.run({ id });
+  } else {
+    // Non-template: mark as launched
+    const stmt = db.prepare(`
+      UPDATE next_ups
+      SET status = 'launched', updated_at = datetime('now')
+      WHERE id = :id
+    `);
+    stmt.run({ id });
+  }
+}
+
+/**
+ * Deletes a next-up permanently.
+ *
+ * @param id - Next-up ID
+ */
+export function deleteNextUp(id: string): void {
+  const db = getDb();
+  const stmt = db.prepare(`
+    DELETE FROM next_ups WHERE id = :id
+  `);
+  stmt.run({ id });
+}
+
+/**
+ * Gets a next-up by ID.
+ *
+ * @param id - Next-up ID
+ * @returns Next-up or null if not found
+ */
+export function getNextUpById(id: string): NextUp | null {
+  const db = getDb();
+  const stmt = db.prepare("SELECT * FROM next_ups WHERE id = :id");
+  const results = stmt.all({ id }) as NextUp[];
+  return results.length > 0 ? results[0] : null;
+}
+
+/**
+ * Touches a next-up (updates updated_at).
+ *
+ * @param id - Next-up ID
+ */
+export function touchNextUp(id: string): void {
+  const db = getDb();
+  const stmt = db.prepare(`
+    UPDATE next_ups
+    SET updated_at = datetime('now')
+    WHERE id = :id
+  `);
+  stmt.run({ id });
 }
 
 // ============================================================================

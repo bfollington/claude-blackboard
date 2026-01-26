@@ -9,6 +9,7 @@ export type ReflectionTrigger = 'manual' | 'compact' | 'completion' | 'stop';
 export type BugReportStatus = 'open' | 'resolved' | 'wontfix';
 export type ThreadStatus = 'active' | 'paused' | 'completed' | 'archived';
 export type WorkerStatus = 'running' | 'completed' | 'failed' | 'killed';
+export type NextUpStatus = 'active' | 'archived' | 'launched';
 
 export interface Thread {
   id: string;
@@ -77,6 +78,18 @@ export interface BugReport {
   repro_steps: string;
   evidence: string | null;
   status: BugReportStatus;
+}
+
+export interface NextUp {
+  id: string;
+  title: string;
+  content: string;
+  is_template: number;
+  status: NextUpStatus;
+  created_at: string;
+  updated_at: string;
+  last_launched_at: string | null;
+  launch_count: number;
 }
 
 export interface Worker {

@@ -10,6 +10,7 @@ import type {
   PlanStep,
   Breadcrumb,
   BugReport,
+  NextUp,
   ThreadStatus,
   BugReportStatus,
   Worker,
@@ -32,6 +33,13 @@ import {
   insertThread,
   resolveThread,
   insertPlan,
+  listNextUps,
+  insertNextUp,
+  updateNextUp,
+  archiveNextUp,
+  launchNextUp,
+  deleteNextUp,
+  getNextUpById,
 } from "../db/queries.ts";
 import { getActiveWorkers, updateWorkerStatus, insertWorker } from "../db/worker-queries.ts";
 import { dockerRun, dockerKill, isDockerAvailable, parseEnvFile, type ContainerOptions } from "../docker/client.ts";
@@ -42,7 +50,7 @@ import { dirname } from "jsr:@std/path";
 import { resolveDbPath } from "../db/connection.ts";
 
 // Tab identifiers for the main navigation
-export type TabId = "threads" | "bugs" | "reflections";
+export type TabId = "threads" | "bugs" | "reflections" | "next-ups";
 
 // Pane identifiers for focus management within the threads tab
 export type PaneId = "list" | "plan" | "steps" | "crumbs";
@@ -85,6 +93,15 @@ export interface BugListItem extends BugReport {
 }
 
 /**
+ * Next-up with computed display data for the list view.
+ */
+export interface NextUpListItem extends NextUp {
+  titleTruncated: string;
+  updatedAtRelative: string;
+  statusIcon: string;
+}
+
+/**
  * Core TUI state interface.
  * All mutable state is wrapped in signals for reactivity.
  */
@@ -114,6 +131,12 @@ export interface TuiState {
   selectedBugIndex: Signal<number>;
   bugFilter: Signal<BugFilter>;
 
+  // Next-ups state
+  nextUps: Signal<NextUp[]>;
+  selectedNextUpIndex: Signal<number>;
+  isCreatingNextUp: Signal<boolean>;
+  newNextUpTitle: Signal<string>;
+
   // Computed values
   selectedThread: Computed<Thread | null>;
   filteredThreads: Computed<Thread[]>;
@@ -123,6 +146,8 @@ export interface TuiState {
   selectedBug: Computed<BugReport | null>;
   filteredBugs: Computed<BugReport[]>;
   bugListItems: Computed<BugListItem[]>;
+  selectedNextUp: Computed<NextUp | null>;
+  nextUpListItems: Computed<NextUpListItem[]>;
 
   // UI state
   shouldQuit: Signal<boolean>;
@@ -202,6 +227,12 @@ export function createTuiState(): TuiState {
   const bugReports = new Signal<BugReport[]>([]);
   const selectedBugIndex = new Signal<number>(0);
   const bugFilter = new Signal<BugFilter>("all");
+
+  // Next-ups state
+  const nextUps = new Signal<NextUp[]>([]);
+  const selectedNextUpIndex = new Signal<number>(0);
+  const isCreatingNextUp = new Signal<boolean>(false);
+  const newNextUpTitle = new Signal<string>("");
 
   // UI state
   const shouldQuit = new Signal<boolean>(false);
@@ -324,6 +355,47 @@ export function createTuiState(): TuiState {
     });
   });
 
+  // Computed: get currently selected next-up
+  const selectedNextUp = new Computed<NextUp | null>(() => {
+    const allNextUps = nextUps.value;
+    const index = selectedNextUpIndex.value;
+    if (index >= 0 && index < allNextUps.length) {
+      return allNextUps[index];
+    }
+    return null;
+  });
+
+  // Computed: next-up list items with display data
+  const nextUpListItems = new Computed<NextUpListItem[]>(() => {
+    const allNextUps = nextUps.value;
+    return allNextUps.map((nextUp) => {
+      // Truncate title to max 60 chars
+      const maxTitleLength = 60;
+      const titleTruncated = nextUp.title.length > maxTitleLength
+        ? nextUp.title.substring(0, maxTitleLength - 1) + "~"
+        : nextUp.title;
+
+      // Determine status icon
+      let statusIcon: string;
+      if (nextUp.is_template === 1 && nextUp.status === 'active') {
+        statusIcon = '#'; // Template
+      } else if (nextUp.status === 'active') {
+        statusIcon = '*'; // Active
+      } else if (nextUp.status === 'archived') {
+        statusIcon = '.'; // Archived
+      } else {
+        statusIcon = '→'; // Launched
+      }
+
+      return {
+        ...nextUp,
+        titleTruncated,
+        updatedAtRelative: relativeTime(nextUp.updated_at),
+        statusIcon,
+      };
+    });
+  });
+
   return {
     activeTab,
     focusedPane,
@@ -340,6 +412,10 @@ export function createTuiState(): TuiState {
     bugReports,
     selectedBugIndex,
     bugFilter,
+    nextUps,
+    selectedNextUpIndex,
+    isCreatingNextUp,
+    newNextUpTitle,
     selectedThread,
     filteredThreads,
     threadListItems,
@@ -348,6 +424,8 @@ export function createTuiState(): TuiState {
     selectedBug,
     filteredBugs,
     bugListItems,
+    selectedNextUp,
+    nextUpListItems,
     shouldQuit,
     isLoading,
     statusMessage,
@@ -414,6 +492,20 @@ export interface TuiActions {
   moveBugSelection: (delta: number) => void;
   cycleBugFilter: () => void;
   updateBugStatus: (bug: BugReport, status: BugReportStatus) => void;
+
+  // Next-ups operations
+  loadNextUps: () => void;
+  selectNextUp: (index: number) => void;
+  moveNextUpSelection: (delta: number) => void;
+  startCreateNextUp: () => void;
+  updateNewNextUpTitle: (title: string) => void;
+  confirmCreateNextUp: () => Promise<void>;
+  cancelCreateNextUp: () => void;
+  toggleNextUpTemplate: () => void;
+  launchNextUpAsThread: () => Promise<void>;
+  archiveNextUpItem: () => void;
+  deleteNextUpItem: () => void;
+  editNextUpContent: () => Promise<void>;
 
   // Auto-refresh
   refreshAll: () => void;
@@ -962,6 +1054,214 @@ export function createTuiActions(state: TuiState): TuiActions {
       this.setStatusMessage(`Bug "${bug.title.substring(0, 30)}..." ${statusLabel}`);
     },
 
+    loadNextUps() {
+      state.isLoading.value = true;
+      try {
+        const nextUpsList = listNextUps(false); // Only show active by default
+        state.nextUps.value = nextUpsList;
+
+        // Reset selection if out of bounds
+        if (state.selectedNextUpIndex.value >= nextUpsList.length) {
+          state.selectedNextUpIndex.value = Math.max(0, nextUpsList.length - 1);
+        }
+      } finally {
+        state.isLoading.value = false;
+      }
+    },
+
+    selectNextUp(index: number) {
+      const nextUps = state.nextUps.value;
+      if (index >= 0 && index < nextUps.length) {
+        state.selectedNextUpIndex.value = index;
+      }
+    },
+
+    moveNextUpSelection(delta: number) {
+      const nextUps = state.nextUps.value;
+      const newIndex = state.selectedNextUpIndex.value + delta;
+      if (newIndex >= 0 && newIndex < nextUps.length) {
+        this.selectNextUp(newIndex);
+      }
+    },
+
+    startCreateNextUp() {
+      state.isCreatingNextUp.value = true;
+      state.newNextUpTitle.value = "";
+    },
+
+    updateNewNextUpTitle(title: string) {
+      state.newNextUpTitle.value = title;
+    },
+
+    async confirmCreateNextUp() {
+      const title = state.newNextUpTitle.value.trim();
+      if (!title) {
+        state.isCreatingNextUp.value = false;
+        return;
+      }
+
+      // Open editor for content
+      const tempFile = await Deno.makeTempFile({ prefix: "nextup_", suffix: ".md" });
+      await Deno.writeTextFile(tempFile, "");
+
+      const editor = Deno.env.get("EDITOR") || "vim";
+      const command = new Deno.Command(editor, {
+        args: [tempFile],
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+
+      const status = await command.status;
+      if (status.success) {
+        const content = await Deno.readTextFile(tempFile);
+        if (content.trim()) {
+          insertNextUp({
+            title,
+            content: content.trim(),
+            is_template: 0,
+            status: 'active',
+          });
+          this.loadNextUps();
+          this.setStatusMessage(`Next-up "${title}" created`);
+        }
+      }
+
+      await Deno.remove(tempFile);
+      state.isCreatingNextUp.value = false;
+      state.newNextUpTitle.value = "";
+    },
+
+    cancelCreateNextUp() {
+      state.isCreatingNextUp.value = false;
+      state.newNextUpTitle.value = "";
+    },
+
+    toggleNextUpTemplate() {
+      const nextUp = state.selectedNextUp.value;
+      if (!nextUp) return;
+
+      const newTemplateValue = nextUp.is_template === 1 ? 0 : 1;
+      updateNextUp(nextUp.id, { is_template: newTemplateValue });
+      this.loadNextUps();
+      const label = newTemplateValue === 1 ? "template" : "note";
+      this.setStatusMessage(`Next-up marked as ${label}`);
+    },
+
+    async launchNextUpAsThread() {
+      const nextUp = state.selectedNextUp.value;
+      if (!nextUp) return;
+
+      // Generate thread name from title (kebab-case)
+      let threadName = nextUp.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+
+      // Ensure uniqueness
+      let suffix = 1;
+      const baseName = threadName;
+      while (resolveThread(threadName)) {
+        threadName = `${baseName}-${suffix}`;
+        suffix++;
+      }
+
+      // Create thread
+      const threadId = generateId();
+      const currentBranch = await getCurrentGitBranch();
+      insertThread({
+        id: threadId,
+        name: threadName,
+        current_plan_id: null,
+        git_branches: currentBranch || null,
+        status: 'active',
+      });
+
+      // Create plan with next-up content
+      const planId = generateId();
+      insertPlan({
+        id: planId,
+        status: 'accepted',
+        description: nextUp.title,
+        plan_markdown: nextUp.content,
+        session_id: null,
+        thread_id: threadId,
+      });
+
+      // Link plan to thread
+      updateThread(threadId, { current_plan_id: planId });
+
+      // Update next-up status
+      launchNextUp(nextUp.id);
+
+      // Switch to threads tab and select new thread
+      this.loadThreads();
+      this.loadNextUps();
+      state.activeTab.value = "threads";
+
+      // Find and select the new thread
+      const threads = state.threads.value;
+      const newThreadIndex = threads.findIndex(t => t.id === threadId);
+      if (newThreadIndex >= 0) {
+        state.selectedThreadIndex.value = newThreadIndex;
+        this.loadThreadDetails(threads[newThreadIndex]);
+      }
+
+      this.setStatusMessage(`Thread "${threadName}" created from next-up`);
+    },
+
+    archiveNextUpItem() {
+      const nextUp = state.selectedNextUp.value;
+      if (!nextUp) return;
+
+      archiveNextUp(nextUp.id);
+      this.loadNextUps();
+      this.setStatusMessage(`Next-up "${nextUp.title}" archived`);
+    },
+
+    deleteNextUpItem() {
+      const nextUp = state.selectedNextUp.value;
+      if (!nextUp) return;
+
+      this.showConfirmation(
+        `Delete next-up "${nextUp.title}"?`,
+        () => {
+          deleteNextUp(nextUp.id);
+          this.loadNextUps();
+          this.setStatusMessage(`Next-up "${nextUp.title}" deleted`);
+        }
+      );
+    },
+
+    async editNextUpContent() {
+      const nextUp = state.selectedNextUp.value;
+      if (!nextUp) return;
+
+      // Open editor with current content
+      const tempFile = await Deno.makeTempFile({ prefix: "nextup_", suffix: ".md" });
+      await Deno.writeTextFile(tempFile, nextUp.content);
+
+      const editor = Deno.env.get("EDITOR") || "vim";
+      const command = new Deno.Command(editor, {
+        args: [tempFile],
+        stdin: "inherit",
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+
+      const status = await command.status;
+      if (status.success) {
+        const newContent = await Deno.readTextFile(tempFile);
+        if (newContent.trim() !== nextUp.content.trim()) {
+          updateNextUp(nextUp.id, { content: newContent.trim() });
+          this.loadNextUps();
+          this.setStatusMessage(`Next-up "${nextUp.title}" updated`);
+        }
+      }
+
+      await Deno.remove(tempFile);
+    },
+
     refreshAll() {
       this.loadThreads();
       this.loadWorkers();
@@ -972,6 +1272,10 @@ export function createTuiActions(state: TuiState): TuiActions {
       // Also refresh bugs when on bugs tab
       if (state.activeTab.value === "bugs") {
         this.loadBugReports();
+      }
+      // Also refresh next-ups when on next-ups tab
+      if (state.activeTab.value === "next-ups") {
+        this.loadNextUps();
       }
     },
 

@@ -77,6 +77,8 @@ export function createStatusBar(options: StatusBarOptions): () => void {
     // Show tab-specific hints
     if (activeTab === "bugs") {
       parts.push("j/k:nav r:resolve x:wontfix o:reopen Shift+Tab:filter");
+    } else if (activeTab === "next-ups") {
+      parts.push("j/k:nav n:new Enter:launch t:template a:archive d:delete o:edit");
     } else {
       // Default to pane-specific hints for threads tab
       parts.push(PANE_HINTS[pane]);
@@ -155,7 +157,7 @@ export function createHelpOverlay(options: {
     crayon.white.bold("  BLACKBOARD DASHBOARD HELP"),
     "",
     crayon.cyan("  Global:"),
-    "    1/2/3     Switch tabs (Threads/Bugs/Reflections)",
+    "    1/2/3/4   Switch tabs (Threads/Bugs/Reflections/Next-Ups)",
     "    Tab       Cycle focus between panes",
     "    o         Open in external app",
     "    i         Import changes from open file",
