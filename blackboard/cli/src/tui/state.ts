@@ -1112,8 +1112,8 @@ export function createTuiActions(state: TuiState): TuiActions {
         stderr: "inherit",
       });
 
-      const status = await command.status;
-      if (status.success) {
+      const result = await command.output();
+      if (result.success) {
         const content = await Deno.readTextFile(tempFile);
         if (content.trim()) {
           insertNextUp({
@@ -1249,8 +1249,8 @@ export function createTuiActions(state: TuiState): TuiActions {
         stderr: "inherit",
       });
 
-      const status = await command.status;
-      if (status.success) {
+      const result = await command.output();
+      if (result.success) {
         const newContent = await Deno.readTextFile(tempFile);
         if (newContent.trim() !== nextUp.content.trim()) {
           updateNextUp(nextUp.id, { content: newContent.trim() });

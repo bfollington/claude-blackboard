@@ -715,7 +715,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         }
 
         // Edit next-up content with 'o'
-        if (event.key === "o") {
+        if ((event.key as string) === "o") {
           actions.setStatusMessage("Opening editor...");
           actions.editNextUpContent().catch((err) => {
             actions.setStatusMessage(`Edit error: ${err.message?.slice(0, 30) || err}`);
