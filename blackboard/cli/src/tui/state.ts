@@ -499,13 +499,13 @@ export interface TuiActions {
   moveNextUpSelection: (delta: number) => void;
   startCreateNextUp: () => void;
   updateNewNextUpTitle: (title: string) => void;
-  confirmCreateNextUp: () => Promise<void>;
+  confirmCreateNextUp: () => void;
   cancelCreateNextUp: () => void;
   toggleNextUpTemplate: () => void;
   launchNextUpAsThread: () => Promise<void>;
   archiveNextUpItem: () => void;
   deleteNextUpItem: () => void;
-  editNextUpContent: () => Promise<void>;
+  saveNextUpContent: (id: string, content: string) => void;
 
   // Auto-refresh
   refreshAll: () => void;
@@ -588,12 +588,14 @@ export function createTuiActions(state: TuiState): TuiActions {
 
     loadThreadDetails(thread: Thread) {
       if (thread.current_plan_id) {
+        state.selectedPlan.value = getPlanById(thread.current_plan_id);
         state.steps.value = getStepsForPlan(thread.current_plan_id);
         state.breadcrumbs.value = getRecentBreadcrumbs(
           thread.current_plan_id,
           20
         );
       } else {
+        state.selectedPlan.value = null;
         state.steps.value = [];
         state.breadcrumbs.value = [];
       }
@@ -1093,41 +1095,25 @@ export function createTuiActions(state: TuiState): TuiActions {
       state.newNextUpTitle.value = title;
     },
 
-    async confirmCreateNextUp() {
+    confirmCreateNextUp() {
       const title = state.newNextUpTitle.value.trim();
       if (!title) {
         state.isCreatingNextUp.value = false;
         return;
       }
 
-      // Open editor for content
-      const tempFile = await Deno.makeTempFile({ prefix: "nextup_", suffix: ".md" });
-      await Deno.writeTextFile(tempFile, "");
-
-      const editor = Deno.env.get("EDITOR") || "vim";
-      const command = new Deno.Command(editor, {
-        args: [tempFile],
-        stdin: "inherit",
-        stdout: "inherit",
-        stderr: "inherit",
+      // Create next-up with empty content - user can press 'o' to edit
+      insertNextUp({
+        title,
+        content: "",
+        is_template: 0,
+        status: 'active',
       });
+      this.loadNextUps();
+      // Select the newly created item (it's first in the list, sorted by updated_at DESC)
+      state.selectedNextUpIndex.value = 0;
+      this.setStatusMessage(`Next-up "${title}" created - press 'o' to add content`);
 
-      const result = await command.output();
-      if (result.success) {
-        const content = await Deno.readTextFile(tempFile);
-        if (content.trim()) {
-          insertNextUp({
-            title,
-            content: content.trim(),
-            is_template: 0,
-            status: 'active',
-          });
-          this.loadNextUps();
-          this.setStatusMessage(`Next-up "${title}" created`);
-        }
-      }
-
-      await Deno.remove(tempFile);
       state.isCreatingNextUp.value = false;
       state.newNextUpTitle.value = "";
     },
@@ -1233,33 +1219,13 @@ export function createTuiActions(state: TuiState): TuiActions {
       );
     },
 
-    async editNextUpContent() {
-      const nextUp = state.selectedNextUp.value;
-      if (!nextUp) return;
-
-      // Open editor with current content
-      const tempFile = await Deno.makeTempFile({ prefix: "nextup_", suffix: ".md" });
-      await Deno.writeTextFile(tempFile, nextUp.content);
-
-      const editor = Deno.env.get("EDITOR") || "vim";
-      const command = new Deno.Command(editor, {
-        args: [tempFile],
-        stdin: "inherit",
-        stdout: "inherit",
-        stderr: "inherit",
-      });
-
-      const result = await command.output();
-      if (result.success) {
-        const newContent = await Deno.readTextFile(tempFile);
-        if (newContent.trim() !== nextUp.content.trim()) {
-          updateNextUp(nextUp.id, { content: newContent.trim() });
-          this.loadNextUps();
-          this.setStatusMessage(`Next-up "${nextUp.title}" updated`);
-        }
+    saveNextUpContent(id: string, content: string) {
+      updateNextUp(id, { content });
+      this.loadNextUps();
+      const nextUp = getNextUpById(id);
+      if (nextUp) {
+        this.setStatusMessage(`Next-up "${nextUp.title}" updated`);
       }
-
-      await Deno.remove(tempFile);
     },
 
     refreshAll() {

@@ -40,7 +40,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   const components: (Text | Box)[] = [];
 
   // Calculate section heights
-  const planHeight = 3; // Header + 2 content rows
+  const planHeight = 8; // Header + 7 content rows for plan preview
   const workersHeight = 4; // Header + 3 worker rows
   const remainingHeight = rectangle.height - planHeight - workersHeight;
   const stepsHeight = Math.floor(remainingHeight * 0.45);
@@ -229,6 +229,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
 
   const updatePlanSection = () => {
     const thread = state.selectedThread.value;
+    const plan = state.selectedPlan.value;
     const isFocused = state.focusedPane.value === "plan";
 
     planHeaderText.value = isFocused
@@ -243,7 +244,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
       return;
     }
 
-    if (!thread.current_plan_id) {
+    if (!thread.current_plan_id || !plan) {
       if (planRows[0]) planRows[0].text.value = padLine(" No plan - press 'o' to create", rectangle.width);
       for (let i = 1; i < planRows.length; i++) {
         planRows[i].text.value = " ".repeat(rectangle.width);
@@ -251,10 +252,25 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
       return;
     }
 
-    // Show plan hint
-    if (planRows[0]) planRows[0].text.value = padLine(" Plan available - press 'e' to edit", rectangle.width);
-    for (let i = 1; i < planRows.length; i++) {
-      planRows[i].text.value = " ".repeat(rectangle.width);
+    // Show plan content preview
+    const markdown = plan.plan_markdown || "";
+    if (!markdown.trim()) {
+      if (planRows[0]) planRows[0].text.value = padLine(" (empty plan) - press 'o' to edit", rectangle.width);
+      for (let i = 1; i < planRows.length; i++) {
+        planRows[i].text.value = " ".repeat(rectangle.width);
+      }
+      return;
+    }
+
+    // Split content into lines and render
+    const lines = markdown.split("\n");
+    for (let i = 0; i < planRows.length; i++) {
+      if (i < lines.length) {
+        const line = " " + lines[i];
+        planRows[i].text.value = padLine(line, rectangle.width);
+      } else {
+        planRows[i].text.value = " ".repeat(rectangle.width);
+      }
     }
   };
 
@@ -427,6 +443,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   state.selectedThread.subscribe(updateWorkersSection);
   state.selectedThread.subscribe(updateStepsSection);
   state.selectedThread.subscribe(updateCrumbsSection);
+  state.selectedPlan.subscribe(updatePlanSection);
   state.focusedPane.subscribe(updatePlanSection);
   state.focusedPane.subscribe(updateStepsSection);
   state.focusedPane.subscribe(updateCrumbsSection);

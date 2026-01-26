@@ -21,6 +21,7 @@ import { createThreadInput } from "./components/thread-input.ts";
 import { createBugList } from "./components/bug-list.ts";
 import { createNextUpsList } from "./components/next-ups-list.ts";
 import { createNextUpInput } from "./components/next-up-input.ts";
+import { createNextUpPreview } from "./components/next-up-preview.ts";
 import { createConfirmDialog } from "./components/confirm-dialog.ts";
 
 export interface TuiOptions {
@@ -40,8 +41,9 @@ export interface TuiContext {
 // Track currently open file for import
 interface OpenFile {
   path: string;
-  type: "plan" | "step" | "crumb";
+  type: "plan" | "step" | "crumb" | "nextup";
   index?: number;
+  id?: string; // For next-ups, store the ID
   originalContent: string;
   isNew: boolean; // Whether this is creating a new item vs editing existing
 }
@@ -65,12 +67,12 @@ function restoreTerminal(): void {
  */
 async function openInExternalApp(
   content: string,
-  type: "plan" | "step" | "crumb",
-  index?: number,
-  isNew = false
+  type: "plan" | "step" | "crumb" | "nextup",
+  options: { index?: number; id?: string; isNew?: boolean } = {}
 ): Promise<OpenFile | null> {
-  const suffix = type === "plan" ? ".md" : ".txt";
-  const prefix = type === "plan" ? "plan" : type === "step" ? "step" : "crumb";
+  const { index, id, isNew = false } = options;
+  const suffix = (type === "plan" || type === "nextup") ? ".md" : ".txt";
+  const prefix = type === "plan" ? "plan" : type === "step" ? "step" : type === "crumb" ? "crumb" : "nextup";
 
   // Create temp file with descriptive name
   const tmpDir = await Deno.makeTempDir({ prefix: "blackboard-" });
@@ -104,6 +106,7 @@ async function openInExternalApp(
       path: tmpFile,
       type,
       index,
+      id,
       originalContent: content,
       isNew,
     };
@@ -144,6 +147,12 @@ async function importOpenFile(
       case "crumb":
         actions.saveCrumbSummary(openFile.index ?? 0, newContent.trim());
         actions.setStatusMessage("Crumb imported");
+        break;
+      case "nextup":
+        if (openFile.id) {
+          actions.saveNextUpContent(openFile.id, newContent.trim());
+          actions.setStatusMessage("Next-up imported");
+        }
         break;
     }
 
@@ -289,19 +298,32 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       // Load next-ups
       actions.loadNextUps();
 
-      // Next-ups list uses full width (no detail panel)
+      // Split view: list on left, content preview on right
       const cleanupNextUpsList = createNextUpsList({
         tui,
         state,
         rectangle: {
           column: 0,
           row: 1,
-          width: terminalSize.columns,
+          width: leftPanelWidth,
           height: terminalSize.rows - 2,
         },
       });
 
-      nextUpsTabCleanups.push(cleanupNextUpsList);
+      const previewPanelColumn = leftPanelWidth + 1;
+      const previewPanelWidth = terminalSize.columns - previewPanelColumn;
+      const cleanupNextUpPreview = createNextUpPreview({
+        tui,
+        state,
+        rectangle: {
+          column: previewPanelColumn,
+          row: 1,
+          width: previewPanelWidth,
+          height: terminalSize.rows - 2,
+        },
+      });
+
+      nextUpsTabCleanups.push(cleanupNextUpsList, cleanupNextUpPreview);
     };
 
     // Subscribe to tab changes to switch components
@@ -456,8 +478,16 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
 
     // Handle keybindings
     tui.on("keyPress", async (event) => {
-      // Check if find is active - find input handles its own keys
+      // Check if any input overlay is active - they handle their own keys
       const findActive = state.findState.value.isActive;
+      const isCreatingThread = state.isCreatingThread.value;
+      const isCreatingNextUp = state.isCreatingNextUp.value;
+
+      // If any text input is active, only handle Escape (to cancel) - let input handle other keys
+      if (isCreatingThread || isCreatingNextUp) {
+        // Escape is handled by the input components themselves
+        return;
+      }
 
       // Quit on 'q' or Ctrl+C (only if not in find mode)
       if (!findActive && (event.key === "q" || (event.ctrl && event.key === "c"))) {
@@ -478,8 +508,8 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         // If there are find matches, 'n' navigates to next match
         if (findState.matches.length > 0) {
           actions.findNext();
-        // Otherwise, if focused on list pane and not creating thread, 'n' creates new thread
-        } else if (!state.isCreatingThread.value && state.focusedPane.value === "list") {
+        // Otherwise, if focused on list pane, 'n' creates new thread
+        } else if (state.focusedPane.value === "list") {
           actions.startCreateThread();
         }
         return;
@@ -508,11 +538,6 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         return;
       }
 
-      // Skip other key handling if creating thread
-      if (state.isCreatingThread.value) {
-        return;
-      }
-
       // Tab switching: 1, 2, 3, 4
       if (event.key === "1") {
         actions.switchTab("threads");
@@ -537,8 +562,8 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         return;
       }
 
-      // 'o' key - Open in external app
-      if (event.key === "o") {
+      // 'o' key - Open in external app (threads tab only - other tabs handle 'o' separately)
+      if (event.key === "o" && state.activeTab.value === "threads") {
         const pane = state.focusedPane.value;
         let content: string | null = null;
         let type: "plan" | "step" | "crumb" = "plan";
@@ -568,7 +593,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         }
 
         if (content) {
-          const openFile = await openInExternalApp(content, type, index, isNew);
+          const openFile = await openInExternalApp(content, type, { index, isNew });
           if (openFile) {
             currentOpenFile = openFile;
             const action = isNew ? "Created" : "Opened";
@@ -679,8 +704,8 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         if (isDown) { actions.moveNextUpSelection(1); return; }
         if (isUp) { actions.moveNextUpSelection(-1); return; }
 
-        // Create new next-up with 'n'
-        if (event.key === "n") {
+        // Create new next-up with 'n' (if not already creating)
+        if (event.key === "n" && !state.isCreatingNextUp.value) {
           actions.startCreateNextUp();
           return;
         }
@@ -715,12 +740,24 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
           return;
         }
 
-        // Edit next-up content with 'o'
+        // Edit next-up content with 'o' (uses same pattern as plan editing)
         if ((event.key as string) === "o") {
-          actions.setStatusMessage("Opening editor...");
-          actions.editNextUpContent().catch((err) => {
-            actions.setStatusMessage(`Edit error: ${err.message?.slice(0, 30) || err}`);
-          });
+          const nextUp = state.selectedNextUp.value;
+          if (nextUp) {
+            const openFile = await openInExternalApp(
+              nextUp.content || "",
+              "nextup",
+              { id: nextUp.id }
+            );
+            if (openFile) {
+              currentOpenFile = openFile;
+              actions.setStatusMessage("Opened next-up - press 'i' to import changes");
+            } else {
+              actions.setStatusMessage("Failed to open file");
+            }
+          } else {
+            actions.setStatusMessage("No next-up selected");
+          }
           return;
         }
 

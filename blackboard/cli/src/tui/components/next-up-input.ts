@@ -91,8 +91,17 @@ export function createNextUpInput(options: NextUpInputOptions): () => void {
   });
   components.push(hintText);
 
+  // Skip the first event (the 'n' that triggered creation)
+  let skipFirstEvent = true;
+
   // Key handler for input
   const keyHandler = (event: any) => {
+    // Skip the triggering event
+    if (skipFirstEvent) {
+      skipFirstEvent = false;
+      return;
+    }
+
     const key = event.key;
 
     if (!state.isCreatingNextUp.value) return;
