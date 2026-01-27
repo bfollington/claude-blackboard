@@ -23,6 +23,7 @@ import { createNextUpsList } from "./components/next-ups-list.ts";
 import { createNextUpInput } from "./components/next-up-input.ts";
 import { createNextUpPreview } from "./components/next-up-preview.ts";
 import { createConfirmDialog } from "./components/confirm-dialog.ts";
+import { debounce } from "./utils/debounce.ts";
 
 export interface TuiOptions {
   db?: string;
@@ -380,9 +381,16 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       }
     };
 
+    // Debounce resize handler to avoid excessive re-renders during rapid resizes.
+    // Using 250ms delay provides responsive feedback while preventing performance issues.
+    // - On SIGWINCH (Unix), terminal resize events fire continuously during drag operations
+    // - Recreating all components (boxes, text, signals) on every event is expensive
+    // - Debouncing ensures we only rebuild once the user finishes resizing
+    const debouncedHandleResize = debounce(handleResize, { delayMs: 250 });
+
     // Subscribe to terminal size changes
     tui.canvas.size.subscribe(() => {
-      handleResize();
+      debouncedHandleResize();
     });
 
     // Find input overlay (conditionally rendered based on state)
@@ -814,6 +822,9 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     bugsTabCleanups.forEach(cleanup => cleanup());
     nextUpsTabCleanups.forEach(cleanup => cleanup());
     cleanupTabBar();
+
+    // Cancel any pending debounced resize
+    debouncedHandleResize.cancel();
 
     // Clear refresh interval
     clearInterval(refreshInterval);
