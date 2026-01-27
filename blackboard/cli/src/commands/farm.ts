@@ -14,6 +14,7 @@ import {
 } from "../db/worker-queries.ts";
 import {
   isDockerAvailable,
+  dockerImageExists,
   dockerBuild,
   dockerRun,
   dockerRm,
@@ -202,7 +203,18 @@ export async function farmCommand(options: FarmOptions): Promise<void> {
     Deno.exit(1);
   }
 
-  // 2. If --build flag, build the worker image
+  // 2. Auto-build image if missing
+  if (!options.build) {
+    const imageExists = await dockerImageExists(imageName);
+    if (!imageExists) {
+      if (!options.quiet) {
+        console.log(`Image "${imageName}" not found locally. Building...`);
+      }
+      options.build = true;
+    }
+  }
+
+  // Build the worker image if requested or auto-triggered
   if (options.build) {
     if (!options.quiet) {
       console.log(`Building worker image: ${imageName}`);

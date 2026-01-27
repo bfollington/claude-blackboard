@@ -112,6 +112,18 @@ export async function isDockerAvailable(): Promise<boolean> {
 }
 
 /**
+ * Check if a Docker image exists locally.
+ */
+export async function dockerImageExists(imageName: string): Promise<boolean> {
+  try {
+    const result = await runDocker(["image", "inspect", imageName]);
+    return result.code === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolve the Dockerfile to use for building the worker image.
  * Priority order:
  * 1. Dockerfile.worker in project root (user override)

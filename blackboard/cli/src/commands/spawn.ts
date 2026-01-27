@@ -8,6 +8,7 @@ import { resolveThread } from "../db/queries.ts";
 import { insertWorker } from "../db/worker-queries.ts";
 import {
   isDockerAvailable,
+  dockerImageExists,
   dockerBuild,
   dockerRun,
   resolveDockerfile,
@@ -70,6 +71,17 @@ export async function spawnCommand(
 
   // 3. If --build flag, build the worker image
   const imageName = options.image || "blackboard-worker:latest";
+
+  // Auto-build image if missing (unless --build already requested)
+  if (!options.build) {
+    const imageExists = await dockerImageExists(imageName);
+    if (!imageExists) {
+      if (!options.quiet) {
+        console.log(`Image "${imageName}" not found locally. Building...`);
+      }
+      options.build = true;
+    }
+  }
 
   if (options.build) {
     if (!options.quiet) {

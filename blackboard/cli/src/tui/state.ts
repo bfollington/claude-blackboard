@@ -42,11 +42,10 @@ import {
   getNextUpById,
 } from "../db/queries.ts";
 import { getActiveWorkers, updateWorkerStatus, insertWorker } from "../db/worker-queries.ts";
-import { dockerRun, dockerKill, isDockerAvailable, parseEnvFile, type ContainerOptions } from "../docker/client.ts";
-import { join } from "jsr:@std/path";
+import { dockerRun, dockerKill, dockerBuild, dockerImageExists, isDockerAvailable, parseEnvFile, resolveDockerfile, type ContainerOptions } from "../docker/client.ts";
+import { join, dirname, fromFileUrl } from "jsr:@std/path";
 import { generateId } from "../utils/id.ts";
 import { extractAndValidateOAuthToken } from "../utils/oauth.ts";
-import { dirname } from "jsr:@std/path";
 import { resolveDbPath } from "../db/connection.ts";
 
 // Tab identifiers for the main navigation
@@ -901,6 +900,33 @@ export function createTuiActions(state: TuiState): TuiActions {
         return;
       }
 
+      // Auto-build image if missing
+      const imageName = "blackboard-worker:latest";
+      const imageExists = await dockerImageExists(imageName);
+      if (!imageExists) {
+        this.setStatusMessage("Building worker image (first run)...");
+
+        const pluginRoot = Deno.env.get("CLAUDE_PLUGIN_ROOT") ||
+          join(dirname(fromFileUrl(import.meta.url)), "..", "..", "..", "..");
+        const projectRoot = Deno.cwd();
+        const dockerfilePath = await resolveDockerfile(projectRoot, pluginRoot);
+
+        if (!dockerfilePath) {
+          state.workerError.value = "No Dockerfile found - run 'blackboard init-worker'";
+          this.setStatusMessage("No Dockerfile found");
+          return;
+        }
+
+        try {
+          await dockerBuild(imageName, pluginRoot, dockerfilePath);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          state.workerError.value = `Build failed: ${msg}`;
+          this.setStatusMessage("Build failed");
+          return;
+        }
+      }
+
       // Generate worker ID
       const workerId = generateId();
 
@@ -938,7 +964,7 @@ export function createTuiActions(state: TuiState): TuiActions {
       try {
         this.setStatusMessage("Spawning worker...");
         const containerOptions: ContainerOptions = {
-          image: "blackboard-worker:latest",
+          image: imageName,
           threadName: thread.name,
           dbDir,
           repoDir,
