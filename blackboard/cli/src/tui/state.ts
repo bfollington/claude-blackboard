@@ -42,7 +42,7 @@ import {
   getNextUpById,
 } from "../db/queries.ts";
 import { getActiveWorkers, updateWorkerStatus, insertWorker } from "../db/worker-queries.ts";
-import { dockerRun, dockerKill, dockerBuild, dockerImageExists, isDockerAvailable, parseEnvFile, resolveDockerfile, type ContainerOptions } from "../docker/client.ts";
+import { dockerRun, dockerKill, dockerBuild, dockerImageExists, isDockerAvailable, parseEnvFile, resolveDockerfile, reconcileWorkers, type ContainerOptions } from "../docker/client.ts";
 import { join, dirname, fromFileUrl } from "jsr:@std/path";
 import { generateId } from "../utils/id.ts";
 import { extractAndValidateOAuthToken } from "../utils/oauth.ts";
@@ -883,8 +883,20 @@ export function createTuiActions(state: TuiState): TuiActions {
       this.setStatusMessage("Cancelled");
     },
 
-    loadWorkers() {
+    async loadWorkers() {
+      // Get running workers and reconcile with actual container state
       const activeWorkers = getActiveWorkers();
+
+      if (activeWorkers.length > 0) {
+        const dockerAvailable = await isDockerAvailable();
+        if (dockerAvailable) {
+          await reconcileWorkers(activeWorkers, updateWorkerStatus);
+          // Re-fetch after reconciliation
+          state.workers.value = getActiveWorkers();
+          return;
+        }
+      }
+
       state.workers.value = activeWorkers;
     },
 

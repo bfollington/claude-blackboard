@@ -3,7 +3,8 @@
  */
 
 import { getDb } from "../db/connection.ts";
-import { getActiveWorkers } from "../db/worker-queries.ts";
+import { getActiveWorkers, updateWorkerStatus } from "../db/worker-queries.ts";
+import { reconcileWorkers, isDockerAvailable } from "../docker/client.ts";
 import { relativeTime } from "../utils/time.ts";
 import type { Worker } from "../types/schema.ts";
 
@@ -22,6 +23,18 @@ export async function workersCommand(
 ): Promise<void> {
   const db = getDb(options.db);
 
+  // Reconcile running workers with actual container state before listing
+  const dockerAvailable = await isDockerAvailable();
+  if (dockerAvailable) {
+    const runningWorkers = getActiveWorkers();
+    if (runningWorkers.length > 0) {
+      const result = await reconcileWorkers(runningWorkers, updateWorkerStatus);
+      if (result.updated > 0 && !options.quiet && !options.json) {
+        console.log(`Reconciled ${result.updated} dead worker(s)\n`);
+      }
+    }
+  }
+
   let workers: Array<Worker & { thread_name: string }>;
 
   if (options.all) {
@@ -34,7 +47,7 @@ export async function workersCommand(
     `);
     workers = stmt.all() as Array<Worker & { thread_name: string }>;
   } else {
-    // Get only active workers
+    // Get only active workers (re-query after reconciliation)
     workers = getActiveWorkers();
   }
 

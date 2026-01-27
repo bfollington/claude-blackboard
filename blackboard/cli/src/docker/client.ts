@@ -398,6 +398,62 @@ export async function dockerInspect(containerId: string): Promise<ContainerState
 }
 
 /**
+ * Check if a container is actually running.
+ * Returns null if container doesn't exist.
+ */
+export async function isContainerRunning(containerId: string): Promise<boolean | null> {
+  try {
+    const state = await dockerInspect(containerId);
+    return state.running;
+  } catch {
+    // Container doesn't exist
+    return null;
+  }
+}
+
+/**
+ * Reconcile worker records with actual container state.
+ * Updates DB status for workers whose containers have exited or disappeared.
+ * @param workers Array of workers to check (should have status='running')
+ * @param updateStatusFn Function to update worker status in DB
+ * @returns Object with counts of reconciled workers
+ */
+export async function reconcileWorkers(
+  workers: Array<{ id: string; container_id: string }>,
+  updateStatusFn: (id: string, status: "failed" | "completed" | "killed") => void
+): Promise<{ checked: number; updated: number; removed: number }> {
+  let checked = 0;
+  let updated = 0;
+  let removed = 0;
+
+  for (const worker of workers) {
+    checked++;
+    const running = await isContainerRunning(worker.container_id);
+
+    if (running === null) {
+      // Container doesn't exist - mark as failed and clean up
+      updateStatusFn(worker.id, "failed");
+      updated++;
+      removed++;
+    } else if (running === false) {
+      // Container exists but exited - mark as failed
+      updateStatusFn(worker.id, "failed");
+      updated++;
+      // Also remove the dead container
+      try {
+        await dockerRm(worker.container_id);
+        removed++;
+      } catch {
+        // Ignore removal errors
+      }
+    }
+    // If running === true, worker is healthy, do nothing
+  }
+
+  return { checked, updated, removed };
+}
+
+/**
  * Remove orphaned containers (labeled blackboard.managed=true but not in DB).
  * @param activeWorkerIds List of worker IDs currently in the database
  * @returns Number of containers removed
