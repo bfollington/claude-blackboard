@@ -114,7 +114,7 @@ export function createThreadList(options: ThreadListOptions): () => void {
         const item = items[i];
         const isSelected = i === selectedIndex;
         // Use > prefix to indicate selection since we can't change bg color dynamically
-        row.text.value = formatThreadRow(item, isSelected, focusedOnList, rectangle.width);
+        row.text.value = formatThreadRow(item, isSelected, focusedOnList, rectangle.width, state);
       } else {
         row.text.value = " ".repeat(rectangle.width);
       }
@@ -163,14 +163,20 @@ function getSpinnerFrame(): string {
  * Format a single thread row with status icon, name, worker count, pending count, and time.
  * Returns PLAIN TEXT - styling is handled by the component theme.
  * Format: ">* thread-name [2w |] (3) - 5m ago" (with animated spinner when workers active)
+ * Format with notification: ">x! thread-name (done) - 5m ago" (for threads completed this session)
  */
 function formatThreadRow(
   item: ThreadListItem,
   isSelected: boolean,
   isFocused: boolean,
-  maxWidth: number
+  maxWidth: number,
+  state: TuiState
 ): string {
   const icon = STATUS_ICONS[item.status] || "?";
+
+  // Check if this thread completed during this session
+  const completedThisSession = state.isThreadCompletedThisSession(item.id);
+  const notificationIndicator = completedThisSession ? "!" : "";
 
   // Use > or space to indicate selection
   const selectionIndicator = isSelected ? (isFocused ? ">" : "*") : " ";
@@ -188,15 +194,15 @@ function formatThreadRow(
     : (item.status === "completed" ? "(done)" : "");
   const timeStr = item.lastUpdatedRelative;
 
-  // Calculate available space for name (account for worker indicator)
-  const fixedParts = 5 + (workerStr ? workerStr.length + 1 : 0) + (pendingStr ? pendingStr.length + 1 : 0) + 3 + timeStr.length;
+  // Calculate available space for name (account for worker indicator and notification)
+  const fixedParts = 5 + notificationIndicator.length + (workerStr ? workerStr.length + 1 : 0) + (pendingStr ? pendingStr.length + 1 : 0) + 3 + timeStr.length;
   const nameWidth = Math.max(10, maxWidth - fixedParts);
   const truncatedName = item.name.length > nameWidth
     ? item.name.slice(0, nameWidth - 1) + "~"
     : item.name.padEnd(nameWidth);
 
-  // Build plain text line: ">* name [2w |] (3) - 5m"
-  let line = `${selectionIndicator}${icon} ${truncatedName}`;
+  // Build plain text line: ">*! name [2w |] (3) - 5m" (with ! for completed threads)
+  let line = `${selectionIndicator}${icon}${notificationIndicator} ${truncatedName}`;
   if (workerStr) {
     line += ` ${workerStr}`;
   }
