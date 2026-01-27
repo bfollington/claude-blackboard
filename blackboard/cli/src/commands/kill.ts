@@ -5,7 +5,7 @@
 
 import { getActiveWorkers, getWorkersForThread, updateWorkerStatus } from "../db/worker-queries.ts";
 import { resolveThread } from "../db/queries.ts";
-import { dockerKill } from "../docker/client.ts";
+import { dockerKill, isContainerRunning } from "../docker/client.ts";
 
 export interface KillOptions {
   db?: string;
@@ -118,7 +118,22 @@ export async function killCommand(
     }
   }
 
-  // Always update worker status to 'killed'
+  // Verify container is actually stopped before marking as killed
+  const stillRunning = await isContainerRunning(targetWorker.container_id);
+  if (stillRunning === true) {
+    if (options.json) {
+      console.log(JSON.stringify({
+        error: "Container still running after kill attempt",
+        worker_id: targetWorker.id,
+        container_id: targetWorker.container_id,
+      }, null, 2));
+    } else {
+      console.error(`Error: Container ${targetWorker.container_id} still running after kill attempt`);
+    }
+    Deno.exit(1);
+  }
+
+  // Container is stopped (or doesn't exist), update worker status
   updateWorkerStatus(targetWorker.id, 'killed');
 
   if (options.json) {

@@ -42,7 +42,7 @@ import {
   getNextUpById,
 } from "../db/queries.ts";
 import { getActiveWorkers, updateWorkerStatus, insertWorker } from "../db/worker-queries.ts";
-import { dockerRun, dockerKill, dockerBuild, dockerImageExists, isDockerAvailable, parseEnvFile, resolveDockerfile, reconcileWorkers, type ContainerOptions } from "../docker/client.ts";
+import { dockerRun, dockerKill, dockerBuild, dockerImageExists, isDockerAvailable, isContainerRunning, parseEnvFile, resolveDockerfile, reconcileWorkers, type ContainerOptions } from "../docker/client.ts";
 import { join, dirname, fromFileUrl } from "jsr:@std/path";
 import { generateId } from "../utils/id.ts";
 import { extractAndValidateOAuthToken } from "../utils/oauth.ts";
@@ -496,7 +496,7 @@ export interface TuiActions {
   confirmDialogNo: () => void;
 
   // Worker operations
-  loadWorkers: () => void;
+  loadWorkers: () => Promise<void>;
   spawnWorker: (thread: Thread) => Promise<void>;
   killWorker: (workerId: string) => Promise<void>;
   killAllWorkersForThread: (thread: Thread) => Promise<void>;
@@ -1067,8 +1067,15 @@ export function createTuiActions(state: TuiState): TuiActions {
         // Container may already be dead
       }
 
+      // Verify container is actually stopped
+      const stillRunning = await isContainerRunning(worker.container_id);
+      if (stillRunning === true) {
+        this.setStatusMessage(`Failed to kill worker ${workerId.slice(0, 7)} - container still running`);
+        return;
+      }
+
       updateWorkerStatus(workerId, "killed");
-      this.loadWorkers();
+      await this.loadWorkers();
       this.setStatusMessage(`Worker ${workerId.slice(0, 7)} killed`);
     },
 
@@ -1077,17 +1084,31 @@ export function createTuiActions(state: TuiState): TuiActions {
         w => w.thread_id === thread.id && w.status === 'running'
       );
 
+      let killedCount = 0;
+      let failedCount = 0;
+
       for (const worker of threadWorkers) {
         try {
           await dockerKill(worker.container_id);
         } catch {
           // Container may already be dead
         }
-        updateWorkerStatus(worker.id, "killed");
+
+        const stillRunning = await isContainerRunning(worker.container_id);
+        if (stillRunning === true) {
+          failedCount++;
+        } else {
+          updateWorkerStatus(worker.id, "killed");
+          killedCount++;
+        }
       }
 
-      this.loadWorkers();
-      this.setStatusMessage(`Killed ${threadWorkers.length} worker(s)`);
+      await this.loadWorkers();
+      if (failedCount > 0) {
+        this.setStatusMessage(`Killed ${killedCount}, failed to kill ${failedCount} worker(s)`);
+      } else {
+        this.setStatusMessage(`Killed ${killedCount} worker(s)`);
+      }
     },
 
     loadBugReports() {
