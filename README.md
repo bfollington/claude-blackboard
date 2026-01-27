@@ -1,12 +1,15 @@
 # Blackboard Plugin for Claude Code
 
-A local SQLite-based "blackboard" for sharing context between Claude Code sessions and subagents.
+A local SQLite-based "blackboard" for sharing context between Claude Code sessions and subagents. Rather than maximum concurrnecy, the goal is session-independence for agentic coding. Never cling to a context window or terminal tab because the context is already saved. This opens up the ability to move between interactive hands-on work and autonomous containerized workers.
+
+<img width="1187" height="792" alt="Screenshot 2026-01-27 at 1 48 42 pm" src="https://github.com/user-attachments/assets/bd82b778-08c6-4a1f-aec0-6d1209f3f033" />
 
 ## What It Does
 
 Creates a persistent database that stores:
-- **Plans**: Captured when exiting plan mode
-- **Steps**: Parsed from TodoWrite tool usage
+- **Threads**: Lightweight changesets that model context
+- **Plans**: Captured when exiting plan mode (part of a thread)
+- **Steps**: Parsed from TodoWrite tool usage (or manually managed)
 - **Breadcrumbs**: Progress records from subagents
 - **Reflections**: Session insights and learnings
 - **Corrections**: Recorded mistakes and their solutions
@@ -51,11 +54,13 @@ git clone https://github.com/bfollington/claude-blackboard.git
 
 ### CLI Installation
 
+If you launch `claude` and run `/blackboard:install` claude will attempt to guide you through the setup process.
+
 After installing the plugin, you need to install the `blackboard` CLI command:
 
 ```bash
 # Navigate to the plugin directory (usually in ~/.claude/plugins/)
-cd ~/.claude/plugins/bfollington-claude-blackboard/blackboard/cli
+cd ~/.claude/plugins/cache/claude-blackboard/<version>/blackboard/cli
 
 # Install the CLI globally
 deno task install
@@ -67,11 +72,11 @@ This installs the `blackboard` command to `~/.deno/bin`, making it available glo
 
 ### Automatic Initialization
 
-The plugin automatically creates `.claude/blackboard.db` in your project on session start. The database is project-specific and should be gitignored.
+The plugin automatically creates `.claude/blackboard.db` (and `.db-shm` and `.db-wal` files) in your project on session start. The database is project-specific and should be gitignored.
 
 The blackboard CLI provides all functionality through a unified command with subcommands for both interactive use and hook handlers.
 
-### Workflow
+### Workflow (Claude)
 
 1. **Planning**: Enter plan mode (Shift+Tab twice), describe what you want to build. When you approve and Claude calls `ExitPlanMode`:
    - The plan is stored in the blackboard
@@ -83,12 +88,18 @@ The blackboard CLI provides all functionality through a unified command with sub
    - Queries the database for context
    - Implements its assigned step(s)
    - Records a breadcrumb before returning
+  
+3.a. At any stage, end the session etc. and you can resume it safely - plans and todos are automatically captured in the DB.
 
 4. **Completion**: When all steps are done, run `/reflect` to capture learnings.
 
-### SQLite Browser
+### Workflow (CLI)
 
-I recommend using Base (https://menial.co.uk/base/) on macOS to view the state of your DB. Alternatively, use `/query` within `claude-code` to have Claude explore the DB for you.
+You can perform any operations Claude would manually using the `blackboard` CLI.
+
+###  Workflow (TUI)
+
+Create threads and next-ups visually, edit plans in your system editor and kick off containerized workers.
 
 ## Customizing Worker Images
 
