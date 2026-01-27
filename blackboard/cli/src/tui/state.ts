@@ -153,6 +153,12 @@ export interface TuiState {
   isLoading: Signal<boolean>;
   statusMessage: Signal<string>;
 
+  // Session state for tracking thread completions
+  completedThreadsThisSession: Signal<Set<string>>;
+
+  // Helper computed to check if a specific thread completed this session
+  isThreadCompletedThisSession: (threadId: string) => boolean;
+
   // Thread creation state
   isCreatingThread: Signal<boolean>;
   newThreadName: Signal<string>;
@@ -254,6 +260,14 @@ export function createTuiState(): TuiState {
     matches: [],
     currentMatchIndex: -1,
   });
+
+  // Session state: track threads completed during this session
+  const completedThreadsThisSession = new Signal<Set<string>>(new Set());
+
+  // Helper function to check if a thread completed this session
+  const isThreadCompletedThisSession = (threadId: string): boolean => {
+    return completedThreadsThisSession.value.has(threadId);
+  };
 
   // Computed: filter threads based on current filter
   const filteredThreads = new Computed<Thread[]>(() => {
@@ -434,6 +448,8 @@ export function createTuiState(): TuiState {
     confirmMessage,
     confirmAction,
     findState,
+    completedThreadsThisSession,
+    isThreadCompletedThisSession,
   };
 }
 
@@ -513,6 +529,9 @@ export interface TuiActions {
   setStatusMessage: (message: string) => void;
   quit: () => void;
 
+  // Session tracking
+  clearThreadCompletionNotification: (threadId: string) => void;
+
   // Find operations
   startFind: () => void;
   updateFindQuery: (query: string) => void;
@@ -568,6 +587,31 @@ export function createTuiActions(state: TuiState): TuiActions {
         const filter = state.threadFilter.value;
         const threadList =
           filter === "all" ? listThreads() : listThreads(filter);
+
+        // Detect newly completed threads by comparing with previous state
+        const previousThreads = state.threads.value;
+        const previousThreadMap = new Map(
+          previousThreads.map(t => [t.id, t.status])
+        );
+
+        // Track any threads that became 'completed' since last load
+        const completedSet = new Set(state.completedThreadsThisSession.value);
+        for (const thread of threadList) {
+          const previousStatus = previousThreadMap.get(thread.id);
+          // If status changed to 'completed' and wasn't already in our set
+          if (thread.status === 'completed' &&
+              previousStatus &&
+              previousStatus !== 'completed' &&
+              !completedSet.has(thread.id)) {
+            completedSet.add(thread.id);
+          }
+        }
+
+        // Update state if we detected new completions
+        if (completedSet.size !== state.completedThreadsThisSession.value.size) {
+          state.completedThreadsThisSession.value = completedSet;
+        }
+
         state.threads.value = threadList;
 
         // Reset selection if out of bounds
@@ -1295,6 +1339,12 @@ export function createTuiActions(state: TuiState): TuiActions {
 
     quit() {
       state.shouldQuit.value = true;
+    },
+
+    clearThreadCompletionNotification(threadId: string) {
+      const completedSet = new Set(state.completedThreadsThisSession.value);
+      completedSet.delete(threadId);
+      state.completedThreadsThisSession.value = completedSet;
     },
 
     // Find operations

@@ -149,9 +149,20 @@ function padLine(text: string, width: number): string {
 }
 
 /**
+ * Get the current spinner frame based on time.
+ * Cycles through: | / - \
+ * Updates every 150ms (about 6-7 FPS for smooth but not distracting animation)
+ */
+function getSpinnerFrame(): string {
+  const frames = ["|", "/", "-", "\\"];
+  const frameIndex = Math.floor(Date.now() / 150) % frames.length;
+  return frames[frameIndex];
+}
+
+/**
  * Format a single thread row with status icon, name, worker count, pending count, and time.
  * Returns PLAIN TEXT - styling is handled by the component theme.
- * Format: ">* thread-name [2w] (3) - 5m ago"
+ * Format: ">* thread-name [2w |] (3) - 5m ago" (with animated spinner when workers active)
  */
 function formatThreadRow(
   item: ThreadListItem,
@@ -164,8 +175,12 @@ function formatThreadRow(
   // Use > or space to indicate selection
   const selectionIndicator = isSelected ? (isFocused ? ">" : "*") : " ";
 
-  // Build worker indicator
-  const workerStr = item.workerCount > 0 ? `[${item.workerCount}w]` : "";
+  // Build worker indicator with animated spinner if workers are active
+  let workerStr = "";
+  if (item.workerCount > 0) {
+    const spinner = getSpinnerFrame();
+    workerStr = `[${item.workerCount}w ${spinner}]`;
+  }
 
   // Build pending/status indicator
   const pendingStr = item.pendingStepsCount > 0
@@ -180,7 +195,7 @@ function formatThreadRow(
     ? item.name.slice(0, nameWidth - 1) + "~"
     : item.name.padEnd(nameWidth);
 
-  // Build plain text line: ">* name [2w] (3) - 5m"
+  // Build plain text line: ">* name [2w |] (3) - 5m"
   let line = `${selectionIndicator}${icon} ${truncatedName}`;
   if (workerStr) {
     line += ` ${workerStr}`;
