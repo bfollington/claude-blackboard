@@ -1,7 +1,7 @@
 FROM node:22-slim
 
 # Install system dependencies (git, curl, unzip needed for Deno installer)
-RUN apt-get update && apt-get install -y git curl unzip sudo && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y git curl unzip sudo xxd && rm -rf /var/lib/apt/lists/*
 
 # Install Deno (as root, then move to shared location)
 RUN curl -fsSL https://deno.land/install.sh | sh
