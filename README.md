@@ -2,7 +2,7 @@
 
 A local SQLite-based "blackboard" for sharing context between Claude Code sessions and subagents. Rather than maximum concurrnecy, the goal is session-independence for agentic coding. Never cling to a context window or terminal tab because the context is already saved. This opens up the ability to move between interactive hands-on work and autonomous containerized workers.
 
-<img width="1187" height="792" alt="Screenshot 2026-01-27 at 1 48 42 pm" src="https://github.com/user-attachments/assets/bd82b778-08c6-4a1f-aec0-6d1209f3f033" />
+<a href="https://www.youtube.com/watch?v=nLBimOjG6BQ"><img width="1187" height="792" alt="Screenshot 2026-01-27 at 1 48 42 pm" src="https://github.com/user-attachments/assets/bd82b778-08c6-4a1f-aec0-6d1209f3f033" /></a>
 
 ## What It Does
 
