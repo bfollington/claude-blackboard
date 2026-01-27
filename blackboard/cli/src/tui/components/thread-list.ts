@@ -130,8 +130,18 @@ export function createThreadList(options: ThreadListOptions): () => void {
   // Initial render
   updateRows();
 
+  // Set up animation timer for spinner - updates every 150ms when workers are active
+  const animationInterval = setInterval(() => {
+    // Only update if there are active workers (to avoid unnecessary renders)
+    const hasActiveWorkers = state.threadListItems.value.some(item => item.workerCount > 0);
+    if (hasActiveWorkers) {
+      updateRows();
+    }
+  }, 150);
+
   // Return cleanup function
   return () => {
+    clearInterval(animationInterval);
     for (const component of components) {
       component.destroy();
     }
