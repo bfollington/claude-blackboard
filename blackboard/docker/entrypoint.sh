@@ -149,7 +149,7 @@ blackboard --db ${DB_PATH} thread plan ${THREAD_NAME} /tmp/updated-plan.md
 If the plan has no steps yet and you're doing initial research/planning, add them:
 \`\`\`bash
 # Add new steps by inserting directly into plan_steps table:
-blackboard --db ${DB_PATH} query "INSERT INTO plan_steps (id, plan_id, step_order, description) VALUES ('step-' || hex(randomblob(4)), '<plan_id>', <order>, '<description>')"
+blackboard --db ${DB_PATH} query \"INSERT INTO plan_steps (id, plan_id, step_order, description) VALUES ('step-' || hex(randomblob(4)), '<plan_id>', <order>, '<description>')\"
 \`\`\`
 
 ### 7. Commit Changes (if applicable)
