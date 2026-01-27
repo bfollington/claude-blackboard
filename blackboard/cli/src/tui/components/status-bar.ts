@@ -12,8 +12,6 @@ import type { TuiState, PaneId, TabId } from "../state.ts";
 export interface StatusBarOptions {
   tui: Tui;
   state: TuiState;
-  row: number;
-  width: number;
 }
 
 // Keybinding hints for each pane
@@ -37,19 +35,23 @@ const PANE_NAMES: Record<PaneId, string> = {
  * Returns cleanup function to destroy components.
  */
 export function createStatusBar(options: StatusBarOptions): () => void {
-  const { tui, state, row, width } = options;
+  const { tui, state } = options;
   const components: (Text | Box)[] = [];
+
+  // Make width and row reactive to canvas size changes
+  const width = new Computed(() => tui.canvas.size.value.columns);
+  const row = new Computed(() => tui.canvas.size.value.rows - 1);
 
   // Background bar
   const bar = new Box({
     parent: tui,
     theme: { base: crayon.bgLightBlack },
-    rectangle: {
+    rectangle: new Computed(() => ({
       column: 0,
-      row,
-      width,
+      row: row.value,
+      width: width.value,
       height: 1,
-    },
+    })),
     zIndex: 10,
   });
   components.push(bar);
@@ -60,6 +62,7 @@ export function createStatusBar(options: StatusBarOptions): () => void {
     const pane = state.focusedPane.value;
     const message = state.statusMessage.value;
     const activeTab = state.activeTab.value;
+    const currentWidth = width.value;
 
     // Build plain text status line
     const parts: string[] = [];
@@ -94,10 +97,10 @@ export function createStatusBar(options: StatusBarOptions): () => void {
 
     // Pad to width
     const text = " " + parts.join("");
-    if (text.length < width) {
-      return text + " ".repeat(width - text.length);
+    if (text.length < currentWidth) {
+      return text + " ".repeat(currentWidth - text.length);
     }
-    return text.slice(0, width);
+    return text.slice(0, currentWidth);
   });
 
   // Create status text component
@@ -105,10 +108,10 @@ export function createStatusBar(options: StatusBarOptions): () => void {
     parent: tui,
     text: statusText,
     theme: { base: crayon.bgLightBlack.white },
-    rectangle: {
+    rectangle: new Computed(() => ({
       column: 0,
-      row,
-    },
+      row: row.value,
+    })),
     zIndex: 11,
   });
   components.push(statusTextComponent);

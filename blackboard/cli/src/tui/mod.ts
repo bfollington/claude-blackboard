@@ -221,24 +221,23 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     handleMouseControls(tui);
 
     // Create UI components
-    const terminalSize = tui.canvas.size.value;
-    const leftPanelWidth = Math.max(20, Math.floor(terminalSize.columns * 0.25));
+    // Use a function to get current terminal size for resize handling
+    const getCurrentSize = () => tui.canvas.size.value;
+    const getCurrentLeftPanelWidth = () => Math.max(20, Math.floor(getCurrentSize().columns * 0.25));
 
     const cleanupTabBar = createTabBar({ tui, state, row: 0 });
 
-    // Status bar at bottom
-    const cleanupStatusBar = createStatusBar({
-      tui,
-      state,
-      row: terminalSize.rows - 1,
-      width: terminalSize.columns,
-    });
+    // Status bar at bottom (reactive to size changes)
+    const cleanupStatusBar = createStatusBar({ tui, state });
 
     // Tab rendering functions
     const renderThreadsTab = () => {
       // Clean up any existing thread tab components
       threadTabCleanups.forEach(cleanup => cleanup());
       threadTabCleanups = [];
+
+      const terminalSize = getCurrentSize();
+      const leftPanelWidth = getCurrentLeftPanelWidth();
 
       const cleanupThreadList = createThreadList({
         tui,
@@ -275,6 +274,8 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       // Load bug reports
       actions.loadBugReports();
 
+      const terminalSize = getCurrentSize();
+
       // Bug list uses full width (no detail panel)
       const cleanupBugList = createBugList({
         tui,
@@ -297,6 +298,9 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
 
       // Load next-ups
       actions.loadNextUps();
+
+      const terminalSize = getCurrentSize();
+      const leftPanelWidth = getCurrentLeftPanelWidth();
 
       // Split view: list on left, content preview on right
       const cleanupNextUpsList = createNextUpsList({
@@ -361,6 +365,25 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     } else {
       renderThreadsTab();
     }
+
+    // Handle terminal resize by recreating components with new dimensions
+    const handleResize = () => {
+      // Recreate the active tab's components with new dimensions
+      const activeTab = state.activeTab.value;
+
+      if (activeTab === "threads") {
+        renderThreadsTab();
+      } else if (activeTab === "bugs") {
+        renderBugsTab();
+      } else if (activeTab === "next-ups") {
+        renderNextUpsTab();
+      }
+    };
+
+    // Subscribe to terminal size changes
+    tui.canvas.size.subscribe(() => {
+      handleResize();
+    });
 
     // Find input overlay (conditionally rendered based on state)
     const findInputCleanups: Array<() => void> = [];
