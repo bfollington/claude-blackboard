@@ -14,6 +14,7 @@ import {
   setSessionState,
   getThreadById,
   resolveThread,
+  addSessionToThread,
 } from "../db/queries.ts";
 import { getCurrentGitBranch } from "../utils/git.ts";
 import { toKebabCase } from "../utils/string.ts";
@@ -119,6 +120,11 @@ export async function storePlan(): Promise<void> {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+  }
+
+  // Associate session with thread (if session_id is present)
+  if (sessionId) {
+    addSessionToThread(thread!.id, sessionId);
   }
 
   // Insert plan with thread_id

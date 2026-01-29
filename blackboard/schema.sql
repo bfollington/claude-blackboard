@@ -11,6 +11,13 @@ CREATE TABLE IF NOT EXISTS threads (
     status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'paused', 'completed', 'archived'))
 );
 
+CREATE TABLE IF NOT EXISTS thread_sessions (
+    thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now')),
+    PRIMARY KEY (thread_id, session_id)
+);
+
 CREATE TABLE IF NOT EXISTS plans (
     id TEXT PRIMARY KEY,
     created_at TEXT DEFAULT (datetime('now')),

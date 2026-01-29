@@ -12,6 +12,7 @@ import type {
   BugReport,
   Reflection,
   Thread,
+  ThreadSession,
   NextUp,
   PlanStatus,
   StepStatus,
@@ -174,6 +175,43 @@ export function resolveThread(nameOrId: string): Thread | null {
 
   // Fall back to ID
   return getThreadById(nameOrId);
+}
+
+// ============================================================================
+// Thread Sessions
+// ============================================================================
+
+/**
+ * Adds a session to a thread (tracks which sessions have worked on the thread).
+ *
+ * @param threadId - Thread ID
+ * @param sessionId - Session ID
+ */
+export function addSessionToThread(threadId: string, sessionId: string): void {
+  const db = getDb();
+  const stmt = db.prepare(`
+    INSERT INTO thread_sessions (thread_id, session_id)
+    VALUES (:threadId, :sessionId)
+    ON CONFLICT(thread_id, session_id) DO NOTHING
+  `);
+  stmt.run({ threadId, sessionId });
+}
+
+/**
+ * Gets all session IDs that have worked on a thread.
+ *
+ * @param threadId - Thread ID
+ * @returns Array of session IDs ordered by creation time (oldest first)
+ */
+export function getSessionsForThread(threadId: string): string[] {
+  const db = getDb();
+  const stmt = db.prepare(`
+    SELECT session_id FROM thread_sessions
+    WHERE thread_id = :threadId
+    ORDER BY created_at ASC
+  `);
+  const results = stmt.all({ threadId }) as { session_id: string }[];
+  return results.map(row => row.session_id);
 }
 
 // ============================================================================
@@ -1007,6 +1045,119 @@ export function updateBreadcrumbSummary(crumbId: string, summary: string): void 
     WHERE id = :crumbId
   `);
   stmt.run({ crumbId, summary });
+}
+
+// ============================================================================
+// Tasks
+// ============================================================================
+
+/**
+ * Upserts a task to the database for persistence.
+ * If the task already exists (by session_id + id), it will be updated.
+ *
+ * @param sessionId - Session ID that owns the task
+ * @param threadId - Thread ID (can be null if task is not associated with a thread)
+ * @param task - Task data to persist
+ */
+export function upsertTask(
+  sessionId: string,
+  threadId: string | null,
+  task: {
+    id: string;
+    subject: string;
+    description?: string;
+    activeForm?: string;
+    status: string;
+    blocks?: string[];
+    blockedBy?: string[];
+  }
+): void {
+  const db = getDb();
+  const stmt = db.prepare(`
+    INSERT INTO tasks (
+      id, session_id, thread_id, subject, description, active_form,
+      status, blocks, blocked_by, updated_at
+    )
+    VALUES (
+      :id, :sessionId, :threadId, :subject, :description, :activeForm,
+      :status, :blocks, :blockedBy, datetime('now')
+    )
+    ON CONFLICT(session_id, id) DO UPDATE SET
+      thread_id = :threadId,
+      subject = :subject,
+      description = :description,
+      active_form = :activeForm,
+      status = :status,
+      blocks = :blocks,
+      blocked_by = :blockedBy,
+      updated_at = datetime('now')
+  `);
+
+  stmt.run({
+    id: task.id,
+    sessionId,
+    threadId,
+    subject: task.subject,
+    description: task.description ?? null,
+    activeForm: task.activeForm ?? null,
+    status: task.status,
+    blocks: task.blocks ? JSON.stringify(task.blocks) : null,
+    blockedBy: task.blockedBy ? JSON.stringify(task.blockedBy) : null,
+  });
+}
+
+/**
+ * Gets persisted tasks for a thread from the database.
+ * Returns tasks from all sessions that worked on this thread.
+ *
+ * @param threadId - Thread ID
+ * @returns Array of persisted tasks
+ */
+export function getPersistedTasksForThread(threadId: string): Array<{
+  id: string;
+  session_id: string;
+  subject: string;
+  description: string | null;
+  activeForm: string | null;
+  status: string;
+  blocks: string[];
+  blockedBy: string[];
+  created_at: string;
+  updated_at: string;
+}> {
+  const db = getDb();
+  const stmt = db.prepare(`
+    SELECT * FROM tasks
+    WHERE thread_id = :threadId
+    ORDER BY created_at ASC
+  `);
+
+  const results = stmt.all({ threadId }) as Array<{
+    id: string;
+    session_id: string;
+    subject: string;
+    description: string | null;
+    active_form: string | null;
+    status: string;
+    blocks: string | null;
+    blocked_by: string | null;
+    created_at: string;
+    updated_at: string;
+  }>;
+
+  // Parse JSON fields
+  return results.map(task => ({
+    id: task.id,
+    session_id: task.session_id,
+    subject: task.subject,
+    description: task.description,
+    activeForm: task.active_form,
+    status: task.status,
+    blocks: task.blocks ? JSON.parse(task.blocks) : [],
+    blockedBy: task.blocked_by ? JSON.parse(task.blocked_by) : [],
+    created_at: task.created_at,
+    updated_at: task.updated_at,
+  }));
 }
 
 // ============================================================================

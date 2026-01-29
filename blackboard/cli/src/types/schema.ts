@@ -21,6 +21,12 @@ export interface Thread {
   status: ThreadStatus;
 }
 
+export interface ThreadSession {
+  thread_id: string;
+  session_id: string;
+  created_at: string;
+}
+
 export interface Plan {
   id: string;
   created_at: string;

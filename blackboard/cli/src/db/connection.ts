@@ -10,6 +10,8 @@ import { existsSync } from "jsr:@std/fs";
 import { migrate as migrateThreads } from "./migrations/001_threads.ts";
 import { migrate as migrateWorkers } from "./migrations/002_workers.ts";
 import { migrate as migrateOAuthAuthMode } from "./migrations/003_oauth_auth_mode.ts";
+import { migrate as migrateThreadSessions } from "./migrations/004_thread_sessions.ts";
+import { migrate as migrateTasks } from "./migrations/005_tasks.ts";
 
 let dbInstance: Database | null = null;
 
@@ -121,6 +123,8 @@ export function getDb(path?: string): Database {
     migrateThreads(dbInstance);
     migrateWorkers(dbInstance);
     migrateOAuthAuthMode(dbInstance);
+    migrateThreadSessions(dbInstance);
+    migrateTasks(dbInstance);
   } catch {
     // Migrations are idempotent - errors mean already migrated
   }

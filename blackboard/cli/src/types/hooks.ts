@@ -49,6 +49,7 @@ export interface PostToolUseInput {
 export interface PostToolUseOutput extends HookOutput {
   // inject-orchestration: Returns systemMessage with orchestrator instructions
   // capture-todo: Syncs TodoWrite items to plan_steps
+  // capture-task: Syncs TaskCreate/TaskUpdate items to plan_steps
 }
 
 // SubagentStop hook handlers
@@ -91,5 +92,20 @@ export interface TodoWriteInput {
     priority?: string;
     [key: string]: unknown;
   }>;
+  [key: string]: unknown;
+}
+
+// TaskCreate tool input structure (for capture-task hook)
+export interface TaskCreateInput {
+  subject?: string;
+  description?: string;
+  activeForm?: string;
+  [key: string]: unknown;
+}
+
+// TaskUpdate tool input structure (for capture-task hook)
+export interface TaskUpdateInput {
+  taskId?: string;
+  status?: string;
   [key: string]: unknown;
 }
