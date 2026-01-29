@@ -82,9 +82,10 @@ ${threadLines.join("\n")}${workerLine}
 
 ### Commands
 
-- \`/blackboard:thread <name>\` — load a thread and work on it directly
+- \`/blackboard:thread <name>\` — load an existing thread
 - \`/blackboard:threads\` — orchestrate: plan, spawn workers, monitor progress
-- \`blackboard thread new <name>\` — create a new thread
+- \`blackboard thread new <name>\` — create a new thread explicitly
+- *Or just start planning — a thread will be created automatically from the plan title*
 
 ### Thread-Worker Model
 

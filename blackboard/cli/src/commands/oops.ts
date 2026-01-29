@@ -4,7 +4,7 @@
  */
 
 import { getDb } from "../db/connection.ts";
-import { getActivePlan, getCurrentThread } from "../db/queries.ts";
+import { getCurrentThread } from "../db/queries.ts";
 
 interface OopsOptions {
   db?: string;
@@ -15,18 +15,11 @@ interface OopsOptions {
 }
 
 /**
- * Gets the plan ID to use, preferring current thread's plan.
+ * Gets the plan ID from the current thread (most recently touched).
  */
 function getTargetPlanId(): string | null {
-  // First try current thread's plan
   const thread = getCurrentThread();
-  if (thread?.current_plan_id) {
-    return thread.current_plan_id;
-  }
-
-  // Fall back to active plan
-  const activePlan = getActivePlan();
-  return activePlan?.id ?? null;
+  return thread?.current_plan_id ?? null;
 }
 
 /**

@@ -184,6 +184,10 @@ export function resolveThread(nameOrId: string): Thread | null {
  * Gets the currently active plan (status = 'accepted' or 'in_progress').
  * Returns the most recently created active plan.
  *
+ * @deprecated Use session-scoped plan lookup via getSessionState("selected_thread_id")
+ * and getThreadById() instead. This global "active plan" concept is being phased out
+ * in favor of thread-scoped plans.
+ *
  * @returns Active plan or null if none exists
  */
 export function getActivePlan(): Plan | null {

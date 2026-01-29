@@ -6,7 +6,13 @@
 import { readStdin } from "../utils/stdin.ts";
 import { generateId } from "../utils/id.ts";
 import { dbExists } from "../db/schema.ts";
-import { getActivePlan, mergeStepsForPlan, updatePlanStatus } from "../db/queries.ts";
+import {
+  getSessionState,
+  getThreadById,
+  getPlanById,
+  mergeStepsForPlan,
+  updatePlanStatus,
+} from "../db/queries.ts";
 import type { StepStatus } from "../types/schema.ts";
 
 interface TodoItem {
@@ -31,7 +37,7 @@ interface PostToolUseInput {
  * Capture todo hook handler.
  * - Reads JSON from stdin (PostToolUseInput)
  * - Verifies tool_name === "TodoWrite", exits if not
- * - Gets active plan, exits if none
+ * - Gets plan from selected thread (session-scoped)
  * - Extracts todos from tool_input.todos
  * - Merges steps for plan (using mergeStepsForPlan, preserves completed steps)
  * - Updates plan status based on completion
@@ -50,10 +56,20 @@ export async function captureTodo(): Promise<void> {
     Deno.exit(0);
   }
 
-  // Get active plan
-  const plan = getActivePlan();
+  // Get plan from selected thread (session-scoped)
+  const selectedThreadId = getSessionState("selected_thread_id");
+  if (!selectedThreadId) {
+    Deno.exit(0); // No thread selected, let todos pass through
+  }
+
+  const thread = getThreadById(selectedThreadId);
+  if (!thread?.current_plan_id) {
+    Deno.exit(0); // Thread has no plan, let todos pass through
+  }
+
+  const plan = getPlanById(thread.current_plan_id);
   if (!plan) {
-    Deno.exit(0); // No active plan, let todos pass through
+    Deno.exit(0); // Plan not found, let todos pass through
   }
 
   // Extract todos from tool_input

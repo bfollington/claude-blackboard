@@ -6,7 +6,13 @@
 import { readStdin } from "../utils/stdin.ts";
 import { dbExists } from "../db/schema.ts";
 import { getDb } from "../db/connection.ts";
-import { updateStepStatus, getActivePlan, updatePlanStatus } from "../db/queries.ts";
+import {
+  updateStepStatus,
+  updatePlanStatus,
+  getSessionState,
+  getThreadById,
+  getPlanById,
+} from "../db/queries.ts";
 
 /**
  * Update step status hook handler.
@@ -42,18 +48,24 @@ export async function updateStepStatusHook(): Promise<void> {
     // Mark step as completed
     updateStepStatus(stepId, "completed");
 
-    // Check if all steps are done
-    const activePlan = getActivePlan();
-    if (activePlan) {
-      const pendingStmt = db.prepare(`
-        SELECT COUNT(*) as count FROM plan_steps
-        WHERE plan_id = :planId AND status = 'pending'
-      `);
-      const pendingResults = pendingStmt.all({ planId: activePlan.id }) as Array<{ count: number }>;
+    // Check if all steps are done (session-scoped plan)
+    const selectedThreadId = getSessionState("selected_thread_id");
+    if (selectedThreadId) {
+      const thread = getThreadById(selectedThreadId);
+      if (thread?.current_plan_id) {
+        const plan = getPlanById(thread.current_plan_id);
+        if (plan) {
+          const pendingStmt = db.prepare(`
+            SELECT COUNT(*) as count FROM plan_steps
+            WHERE plan_id = :planId AND status = 'pending'
+          `);
+          const pendingResults = pendingStmt.all({ planId: plan.id }) as Array<{ count: number }>;
 
-      if (pendingResults.length > 0 && pendingResults[0].count === 0) {
-        // All done - mark plan complete
-        updatePlanStatus(activePlan.id, "completed");
+          if (pendingResults.length > 0 && pendingResults[0].count === 0) {
+            // All done - mark plan complete
+            updatePlanStatus(plan.id, "completed");
+          }
+        }
       }
     }
   }

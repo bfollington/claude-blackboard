@@ -5,12 +5,12 @@
 
 import { readStdin } from "../utils/stdin.ts";
 import { dbExists } from "../db/schema.ts";
-import { getActivePlan } from "../db/queries.ts";
+import { getSessionState, getThreadById, getPlanById } from "../db/queries.ts";
 
 /**
  * Prompt reflect hook handler.
  * - Reads JSON from stdin (consumes it)
- * - Checks if there's an active plan
+ * - Gets plan from selected thread (session-scoped)
  * - Suggests running /reflect before compacting
  * - Outputs systemMessage with suggestion
  */
@@ -23,8 +23,18 @@ export async function promptReflect(): Promise<void> {
     Deno.exit(0);
   }
 
-  // Get active plan
-  const plan = getActivePlan();
+  // Get plan from selected thread (session-scoped)
+  const selectedThreadId = getSessionState("selected_thread_id");
+  if (!selectedThreadId) {
+    Deno.exit(0);
+  }
+
+  const thread = getThreadById(selectedThreadId);
+  if (!thread?.current_plan_id) {
+    Deno.exit(0);
+  }
+
+  const plan = getPlanById(thread.current_plan_id);
   if (!plan) {
     Deno.exit(0);
   }

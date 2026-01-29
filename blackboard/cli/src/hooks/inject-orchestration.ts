@@ -4,7 +4,7 @@
  */
 
 import { readStdin } from "../utils/stdin.ts";
-import { getActivePlan, getCurrentThread } from "../db/queries.ts";
+import { getSessionState, getThreadById, getPlanById } from "../db/queries.ts";
 
 interface PostToolUseInput {
   tool_name?: string;
@@ -15,7 +15,7 @@ interface PostToolUseInput {
  * Inject orchestration hook handler.
  * - Reads JSON from stdin (PostToolUseInput)
  * - Verifies tool_name === "ExitPlanMode", exits if not
- * - Gets the active plan and current thread
+ * - Gets plan from selected thread (session-scoped)
  * - Outputs thread-aware orchestration instructions
  */
 export async function injectOrchestration(): Promise<void> {
@@ -26,23 +26,29 @@ export async function injectOrchestration(): Promise<void> {
     Deno.exit(0);
   }
 
-  // Get active plan and current thread
-  const plan = getActivePlan();
-  if (!plan) {
+  // Get plan from selected thread (session-scoped)
+  const selectedThreadId = getSessionState("selected_thread_id");
+  if (!selectedThreadId) {
     Deno.exit(0);
   }
 
-  const thread = getCurrentThread();
-  const threadInfo = thread
-    ? `Thread: **${thread.name}** | `
-    : "";
+  const thread = getThreadById(selectedThreadId);
+  if (!thread?.current_plan_id) {
+    Deno.exit(0);
+  }
+
+  const plan = getPlanById(thread.current_plan_id);
+  if (!plan) {
+    Deno.exit(0);
+  }
+  const threadInfo = `Thread: **${thread.name}** | `;
 
   // Build thread-aware orchestration prompt
   const prompt = `## Plan Stored: ${plan.id}
 
 ${threadInfo}Plan: "${plan.description}"
 
-The plan has been stored and associated with ${thread ? `thread "${thread.name}"` : "an auto-created thread"}. Now execute it:
+The plan has been stored and associated with thread "${thread.name}". Now execute it:
 
 ### 1. Create Steps
 Use TodoWrite to break this plan into discrete, ordered steps. Each todo becomes a tracked plan_step.
@@ -73,8 +79,8 @@ blackboard query "SELECT summary, issues FROM breadcrumbs WHERE plan_id='${plan.
 
 ### 5. Updating the Plan
 If you discover the plan needs adjustment (new steps, scope changes, blockers):
-- Use \`blackboard thread plan ${thread?.name || '<thread>'}\` to edit interactively
-- Or \`blackboard thread plan ${thread?.name || '<thread>'} <file.md>\` to update from file
+- Use \`blackboard thread plan ${thread.name}\` to edit interactively
+- Or \`blackboard thread plan ${thread.name} <file.md>\` to update from file
 - Keeping the plan accurate helps future iterations and other workers
 
 ### 6. Completion
@@ -82,7 +88,7 @@ When all steps are done:
 1. Run \`/reflect\` to capture lessons learned
 2. The thread remains available for future sessions
 
-${thread ? `To reload this thread later: \`/blackboard:thread ${thread.name}\`` : ""}
+To reload this thread later: \`/blackboard:thread ${thread.name}\`
 
 **Begin by creating the steps with TodoWrite.**`;
 

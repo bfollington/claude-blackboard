@@ -7,7 +7,6 @@ import { getDb } from "../db/connection.ts";
 import {
   getCurrentThread,
   resolveThread,
-  getActivePlan,
   getPlanById,
   getStepsForPlan,
   getStepById,
@@ -53,9 +52,10 @@ interface StepReorderOptions {
 }
 
 /**
- * Gets the plan ID to use, preferring current thread's plan.
+ * Gets the plan ID to use from a thread.
  * If threadOrPlan is provided, tries to resolve it as a thread name/ID first,
  * then falls back to treating it as a plan ID.
+ * Otherwise uses the current thread (most recently touched).
  */
 function getTargetPlanId(threadOrPlan?: string): string | null {
   if (threadOrPlan) {
@@ -76,13 +76,7 @@ function getTargetPlanId(threadOrPlan?: string): string | null {
 
   // No explicit arg - use current thread's plan
   const thread = getCurrentThread();
-  if (thread?.current_plan_id) {
-    return thread.current_plan_id;
-  }
-
-  // Fall back to active plan
-  const activePlan = getActivePlan();
-  return activePlan?.id ?? null;
+  return thread?.current_plan_id ?? null;
 }
 
 /**
