@@ -26,12 +26,24 @@ import type {
 // ============================================================================
 
 /**
- * Gets the current thread (most recently updated, status = 'active').
+ * Gets the current thread for this session.
+ * First checks session_state for selected_thread_id, falls back to most recently updated active thread.
  *
  * @returns Current thread or null if none exists
  */
 export function getCurrentThread(): Thread | null {
   const db = getDb();
+
+  // First try session-selected thread
+  const selectedThreadId = getSessionState("selected_thread_id");
+  if (selectedThreadId) {
+    const thread = getThreadById(selectedThreadId);
+    if (thread) {
+      return thread;
+    }
+  }
+
+  // Fall back to most recently updated active thread
   const stmt = db.prepare("SELECT * FROM current_thread");
   const results = stmt.all() as Thread[];
   return results.length > 0 ? results[0] : null;
