@@ -1,6 +1,6 @@
 {
   "name": "@blackboard/cli",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "exports": "./mod.ts",
   "tasks": {
     "dev": "deno run --watch --allow-read --allow-write --allow-env --allow-ffi --allow-run=docker,git,security mod.ts",

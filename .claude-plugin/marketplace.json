@@ -10,7 +10,7 @@
     {
       "name": "blackboard",
       "description": "Local SQLite blackboard for cross-session context sharing between Claude Code agents. Captures plans, tracks progress via breadcrumbs, and enables staged subagent execution.",
-      "version": "0.3.3",
+      "version": "0.4.0",
       "author": {
         "name": "bfollington",
         "url": "https://github.com/bfollington"
