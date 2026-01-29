@@ -21,6 +21,7 @@ import {
   listThreads,
   getStepsForPlan,
   getRecentBreadcrumbs,
+  getSessionsForThread,
   updateThread,
   updateStepStatus,
   replaceStepsForPlan,
@@ -47,6 +48,7 @@ import { join, dirname, fromFileUrl } from "jsr:@std/path";
 import { generateId } from "../utils/id.ts";
 import { extractAndValidateOAuthToken } from "../utils/oauth.ts";
 import { resolveDbPath } from "../db/connection.ts";
+import { getTasksForThreadWithHistory, type ClaudeTask } from "../utils/tasks.ts";
 
 // Tab identifiers for the main navigation
 export type TabId = "threads" | "bugs" | "reflections" | "next-ups";
@@ -117,6 +119,7 @@ export interface TuiState {
   // Detail panel state (for selected thread)
   selectedPlan: Signal<Plan | null>;
   steps: Signal<PlanStep[]>;
+  tasks: Signal<ClaudeTask[]>;
   breadcrumbs: Signal<Breadcrumb[]>;
   selectedStepIndex: Signal<number>;
   selectedCrumbIndex: Signal<number>;
@@ -220,6 +223,7 @@ export function createTuiState(): TuiState {
   // Detail panel state
   const selectedPlan = new Signal<Plan | null>(null);
   const steps = new Signal<PlanStep[]>([]);
+  const tasks = new Signal<ClaudeTask[]>([]);
   const breadcrumbs = new Signal<Breadcrumb[]>([]);
   const selectedStepIndex = new Signal<number>(0);
   const selectedCrumbIndex = new Signal<number>(0);
@@ -417,6 +421,7 @@ export function createTuiState(): TuiState {
     threadFilter,
     selectedPlan,
     steps,
+    tasks,
     breadcrumbs,
     selectedStepIndex,
     selectedCrumbIndex,
@@ -642,6 +647,8 @@ export function createTuiActions(state: TuiState): TuiActions {
         state.steps.value = [];
         state.breadcrumbs.value = [];
       }
+      // Load tasks from filesystem (with history from DB)
+      state.tasks.value = getTasksForThreadWithHistory(thread.id);
       // Reset detail selections
       state.selectedStepIndex.value = 0;
       state.selectedCrumbIndex.value = 0;

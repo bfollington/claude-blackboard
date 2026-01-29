@@ -9,6 +9,7 @@ import { crayon } from "https://deno.land/x/crayon@3.3.3/mod.ts";
 import type { Tui } from "https://deno.land/x/tui@2.1.11/mod.ts";
 import type { TuiState } from "../state.ts";
 import type { PlanStep, Breadcrumb } from "../../types/schema.ts";
+import type { ClaudeTask } from "../../utils/tasks.ts";
 import { relativeTime as relativeTimeUtil } from "../../utils/time.ts";
 
 export interface DetailPanelOptions {
@@ -43,14 +44,16 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   const planHeight = 8; // Header + 7 content rows for plan preview
   const workersHeight = 4; // Header + 3 worker rows
   const remainingHeight = rectangle.height - planHeight - workersHeight;
-  const stepsHeight = Math.floor(remainingHeight * 0.45);
-  const crumbsHeight = remainingHeight - stepsHeight;
+  const stepsHeight = Math.floor(remainingHeight * 0.30);
+  const tasksHeight = Math.floor(remainingHeight * 0.30);
+  const crumbsHeight = remainingHeight - stepsHeight - tasksHeight;
 
   // Section starting rows
   const planRow = rectangle.row;
   const workersRow = planRow + planHeight;
   const stepsRow = workersRow + workersHeight;
-  const crumbsRow = stepsRow + stepsHeight;
+  const tasksRow = stepsRow + stepsHeight;
+  const crumbsRow = tasksRow + tasksHeight;
 
   // =========================================================================
   // PLAN SECTION
@@ -177,6 +180,49 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
       zIndex: 2,
     });
     stepsRows.push({ text: rowText, component: text });
+    components.push(text);
+  }
+
+  // =========================================================================
+  // TASKS SECTION (Claude Code tasks from filesystem)
+  // =========================================================================
+  const tasksPanel = new Box({
+    parent: tui,
+    theme: { base: crayon.bgBlack },
+    rectangle: {
+      column: rectangle.column,
+      row: tasksRow,
+      width: rectangle.width,
+      height: tasksHeight,
+    },
+    zIndex: 1,
+  });
+  components.push(tasksPanel);
+
+  // Tasks header
+  const tasksHeaderText = new Signal<string>(" TASKS ");
+  const tasksHeader = new Text({
+    parent: tui,
+    text: tasksHeaderText,
+    theme: { base: crayon.bgBlack.white.bold },
+    rectangle: { column: rectangle.column, row: tasksRow },
+    zIndex: 2,
+  });
+  components.push(tasksHeader);
+
+  // Tasks content rows
+  const tasksRows: { text: Signal<string>; component: Text }[] = [];
+  for (let i = 1; i < tasksHeight; i++) {
+    const rowText = new Signal<string>("");
+
+    const text = new Text({
+      parent: tui,
+      text: rowText,
+      theme: { base: crayon.bgBlack.white },
+      rectangle: { column: rectangle.column, row: tasksRow + i },
+      zIndex: 2,
+    });
+    tasksRows.push({ text: rowText, component: text });
     components.push(text);
   }
 
@@ -375,6 +421,39 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
     }
   };
 
+  const updateTasksSection = () => {
+    const tasks = state.tasks.value;
+
+    const countStr = tasks.length > 0 ? ` (${tasks.length})` : "";
+    tasksHeaderText.value = ` TASKS${countStr} `;
+
+    if (tasks.length === 0) {
+      if (tasksRows[0]) {
+        tasksRows[0].text.value = padLine(" No tasks from Claude Code", rectangle.width);
+      }
+      if (tasksRows[1]) {
+        tasksRows[1].text.value = padLine(" Tasks sync from TaskCreate", rectangle.width);
+      }
+      for (let i = 2; i < tasksRows.length; i++) {
+        tasksRows[i].text.value = " ".repeat(rectangle.width);
+      }
+      return;
+    }
+
+    // Render tasks
+    for (let i = 0; i < tasksRows.length; i++) {
+      if (i < tasks.length) {
+        const task = tasks[i];
+        const statusIcon = task.status === 'completed' ? '[x]' :
+                          task.status === 'in_progress' ? '[>]' : '[ ]';
+        const line = ` ${statusIcon} #${task.id}: ${task.subject}`;
+        tasksRows[i].text.value = padLine(line, rectangle.width);
+      } else {
+        tasksRows[i].text.value = " ".repeat(rectangle.width);
+      }
+    }
+  };
+
   const updateCrumbsSection = () => {
     const crumbs = state.breadcrumbs.value;
     const selectedIndex = state.selectedCrumbIndex.value;
@@ -442,12 +521,14 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   state.selectedThread.subscribe(updatePlanSection);
   state.selectedThread.subscribe(updateWorkersSection);
   state.selectedThread.subscribe(updateStepsSection);
+  state.selectedThread.subscribe(updateTasksSection);
   state.selectedThread.subscribe(updateCrumbsSection);
   state.selectedPlan.subscribe(updatePlanSection);
   state.focusedPane.subscribe(updatePlanSection);
   state.focusedPane.subscribe(updateStepsSection);
   state.focusedPane.subscribe(updateCrumbsSection);
   state.steps.subscribe(updateStepsSection);
+  state.tasks.subscribe(updateTasksSection);
   state.breadcrumbs.subscribe(updateCrumbsSection);
   state.selectedStepIndex.subscribe(updateStepsSection);
   state.selectedCrumbIndex.subscribe(updateCrumbsSection);
@@ -462,6 +543,7 @@ export function createDetailPanel(options: DetailPanelOptions): () => void {
   updatePlanSection();
   updateWorkersSection();
   updateStepsSection();
+  updateTasksSection();
   updateCrumbsSection();
 
   // Return cleanup function
