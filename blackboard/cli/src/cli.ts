@@ -114,48 +114,52 @@ const droneCommand = new Command()
   .option("--max-iterations <n:number>", "Max iterations per session", { default: 100 })
   .option("--timeout <minutes:number>", "Session timeout in minutes", { default: 60 })
   .option("--cooldown <seconds:number>", "Cooldown between iterations", { default: 60 })
-  .action(async (options, name: string) => {
+  .action(async (options: { prompt?: string; file?: string; maxIterations: number; timeout: number; cooldown: number; json?: boolean; quiet?: boolean }, name: string) => {
     await droneNewCommand(name, {
       prompt: options.prompt,
       file: options.file,
       maxIterations: options.maxIterations,
       timeout: options.timeout,
       cooldown: options.cooldown,
+      json: options.json,
+      quiet: options.quiet,
     });
   })
   .reset()
   .command("list", "List all drones")
   .option("--status <status:string>", "Filter by status (active|paused|archived)")
-  .action(async (options: { status?: string }) => {
+  .action(async (options: { status?: string; json?: boolean; quiet?: boolean }) => {
     const listOptions = {
       status: options.status as "active" | "paused" | "archived" | undefined,
+      json: options.json,
+      quiet: options.quiet,
     };
     await droneListCommand(listOptions);
   })
   .reset()
   .command("show", "Show drone details and recent sessions")
   .arguments("<name:string>")
-  .action(async (_options, name: string) => {
-    await droneShowCommand(name, {});
+  .action(async (options: { json?: boolean; quiet?: boolean }, name: string) => {
+    await droneShowCommand(name, { json: options.json, quiet: options.quiet });
   })
   .reset()
   .command("edit", "Edit drone prompt in $EDITOR")
   .arguments("<name:string>")
-  .action(async (_options, name: string) => {
-    await droneEditCommand(name, {});
+  .action(async (options: { quiet?: boolean }, name: string) => {
+    await droneEditCommand(name, { quiet: options.quiet });
   })
   .reset()
   .command("archive", "Archive a drone (soft delete)")
   .arguments("<name:string>")
-  .action(async (_options, name: string) => {
-    await droneArchiveCommand(name, {});
+  .action(async (options: { quiet?: boolean }, name: string) => {
+    await droneArchiveCommand(name, { quiet: options.quiet });
   })
   .reset()
   .command("delete", "Delete a drone permanently")
   .arguments("<name:string>")
   .option("--force", "Skip confirmation prompt")
-  .action(async (options: { force?: boolean }, name: string) => {
-    await droneDeleteCommand(name, options);
+  .action(async (options: { force?: boolean; quiet?: boolean }, name: string) => {
+    await droneDeleteCommand(name, { force: options.force, quiet: options.quiet });
   });
 
 /**
