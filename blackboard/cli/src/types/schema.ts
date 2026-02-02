@@ -104,7 +104,7 @@ export interface NextUp {
 export interface Worker {
   id: string;
   container_id: string;
-  thread_id: string;
+  thread_id: string | null;  // Nullable for drones (which don't belong to threads)
   status: WorkerStatus;
   last_heartbeat: string;
   created_at: string;

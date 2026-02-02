@@ -14,6 +14,7 @@ import { migrate as migrateThreadSessions } from "./migrations/004_thread_sessio
 import { migrate as migrateTasks } from "./migrations/005_tasks.ts";
 import { migrate as migrateWorkerEvents } from "./migrations/006_worker_events.ts";
 import { migrate as migrateDrones } from "./migrations/007_drones.ts";
+import { migrate as migrateNullableThreadId } from "./migrations/008_nullable_thread_id.ts";
 
 let dbInstance: Database | null = null;
 
@@ -129,6 +130,7 @@ export function getDb(path?: string): Database {
     migrateTasks(dbInstance);
     migrateWorkerEvents(dbInstance);
     migrateDrones(dbInstance);
+    migrateNullableThreadId(dbInstance);
   } catch {
     // Migrations are idempotent - errors mean already migrated
   }

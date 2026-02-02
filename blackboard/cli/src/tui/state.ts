@@ -1923,21 +1923,22 @@ export function createTuiActions(state: TuiState): TuiActions {
       const gitBranch = `drones/${drone.name}/${shortSessionId}`;
 
       try {
-        createDroneSession(drone.id, workerId, gitBranch);
-
-        // Update session status to running
-        updateSessionStatus(sessionId, "running");
-
-        // Create worker record
+        // Create worker record first (drone_sessions references workers via FK)
         insertWorker({
           id: workerId,
           container_id: "", // Will be updated after container starts
-          thread_id: null as any, // Drones don't belong to threads
+          thread_id: null, // Drones don't belong to threads
           status: "running",
           auth_mode: authMode,
           iteration: 0,
           max_iterations: drone.max_iterations,
         });
+
+        // Create session in database (after worker exists for FK constraint)
+        createDroneSession(drone.id, workerId, gitBranch);
+
+        // Update session status to running
+        updateSessionStatus(sessionId, "running");
 
         this.setStatusMessage(`Spawning drone "${drone.name}"...`);
 

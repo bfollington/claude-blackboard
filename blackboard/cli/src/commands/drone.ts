@@ -553,15 +553,7 @@ export async function droneStartCommand(
   const dbDir = dirname(dbPath);
   const repoDir = options.repo || Deno.cwd();
 
-  // Create session in database
-  const shortSessionId = sessionId.slice(0, 8);
-  const gitBranch = `drones/${name}/${shortSessionId}`;
-  createDroneSession(drone.id, workerId, gitBranch);
-
-  // Update session status to running
-  updateSessionStatus(sessionId, "running");
-
-  // Create worker record
+  // Create worker record first (drone_sessions references workers via FK)
   insertWorker({
     id: workerId,
     container_id: "", // Will be updated after container starts
@@ -571,6 +563,14 @@ export async function droneStartCommand(
     iteration: 0,
     max_iterations: options.maxIterations || drone.max_iterations,
   });
+
+  // Create session in database (after worker exists for FK constraint)
+  const shortSessionId = sessionId.slice(0, 8);
+  const gitBranch = `drones/${name}/${shortSessionId}`;
+  createDroneSession(drone.id, workerId, gitBranch);
+
+  // Update session status to running
+  updateSessionStatus(sessionId, "running");
 
   if (!options.quiet) {
     console.log(`Spawning drone "${name}" (session ${shortSessionId})...`);

@@ -191,7 +191,7 @@ Do NOT output the completion promise until all work is truly done."
     --append-system-prompt "IMPORTANT: Record breadcrumbs FREQUENTLY using 'blackboard crumb' to track your progress - after exploring code, making decisions, completing modifications, running tests, etc. Update the plan with 'blackboard thread plan' if you discover it needs changes. Use 'blackboard query' to inspect or update the database as needed. Git commits are only required if you modified files - plan-only work (research, planning, adding steps) doesn't need commits. When all steps are genuinely complete, output '${COMPLETION_PROMISE}'. Do not output it prematurely." \
     2> "$STDERR_FILE" \
     | tee "$STDOUT_FILE" \
-    | deno run --allow-read --allow-write --allow-env /app/parse-worker-events.ts "$WORKER_ID" "$iteration" "$DB_PATH" \
+    | deno run --allow-read --allow-write --allow-env --allow-net --allow-ffi /app/parse-worker-events.ts "$WORKER_ID" "$iteration" "$DB_PATH" \
     > /dev/null
   STATUS=$?
   set -e
