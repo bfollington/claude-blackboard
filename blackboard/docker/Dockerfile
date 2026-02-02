@@ -38,7 +38,10 @@ WORKDIR /app/blackboard-cli
 RUN /home/worker/.deno/bin/deno task install
 
 # Cache the SQLite native library at build time
-RUN /home/worker/.deno/bin/deno eval "import '@db/sqlite';" || true
+# Run with all permissions to ensure the native lib downloads
+RUN /home/worker/.deno/bin/deno eval "import '@db/sqlite';" --allow-net --allow-ffi --allow-read --allow-write --allow-env || true
+# Also cache the parser script's dependencies
+RUN /home/worker/.deno/bin/deno cache --allow-net /app/parse-worker-events.ts || true
 
 ENV CLAUDE_PROJECT_DIR=/app/work
 ENV CLAUDE_PLUGIN_ROOT=/app

@@ -115,7 +115,7 @@ Work efficiently and record your progress."
     --append-system-prompt "IMPORTANT: You are a drone executing automated maintenance. Record breadcrumbs using 'blackboard crumb' to track your progress. Use 'blackboard query' to inspect or update the database as needed. Git commits are encouraged when you make changes." \
     2> "$STDERR_FILE" \
     | tee "$STDOUT_FILE" \
-    | deno run --allow-read --allow-write --allow-env /app/parse-worker-events.ts "$WORKER_ID" "$iteration" "$DB_PATH" \
+    | deno run --allow-read --allow-write --allow-env --allow-net --allow-ffi /app/parse-worker-events.ts "$WORKER_ID" "$iteration" "$DB_PATH" \
     > /dev/null
   STATUS=$?
   set -e
