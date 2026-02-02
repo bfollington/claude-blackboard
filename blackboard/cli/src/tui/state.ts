@@ -14,6 +14,9 @@ import type {
   ThreadStatus,
   BugReportStatus,
   Worker,
+  Drone,
+  DroneSession,
+  WorkerEvent,
 } from "../types/schema.ts";
 import { relativeTime as relativeTimeUtil } from "../utils/time.ts";
 import { getCurrentGitBranch } from "../utils/git.ts";
@@ -42,6 +45,17 @@ import {
   deleteNextUp,
   getNextUpById,
 } from "../db/queries.ts";
+import {
+  listDrones,
+  getDrone,
+  createDrone,
+  updateDrone,
+  archiveDrone,
+  deleteDrone,
+  getCurrentSession,
+  listDroneSessions,
+} from "../db/drone-queries.ts";
+import { getWorkerEvents } from "../db/worker-queries.ts";
 import { getActiveWorkers, updateWorkerStatus, insertWorker } from "../db/worker-queries.ts";
 import { dockerRun, dockerKill, dockerBuild, dockerImageExists, isDockerAvailable, isContainerRunning, parseEnvFile, resolveDockerfile, reconcileWorkers, type ContainerOptions } from "../docker/client.ts";
 import { join, dirname, fromFileUrl } from "jsr:@std/path";
@@ -51,7 +65,7 @@ import { resolveDbPath } from "../db/connection.ts";
 import { getTasksForThreadWithHistory, type ClaudeTask } from "../utils/tasks.ts";
 
 // Tab identifiers for the main navigation
-export type TabId = "threads" | "bugs" | "reflections" | "next-ups";
+export type TabId = "threads" | "bugs" | "reflections" | "next-ups" | "drones";
 
 // Pane identifiers for focus management within the threads tab
 export type PaneId = "list" | "plan" | "steps" | "crumbs";
@@ -103,6 +117,16 @@ export interface NextUpListItem extends NextUp {
 }
 
 /**
+ * Drone with computed display data for the list view.
+ */
+export interface DroneListItem extends Drone {
+  nameTruncated: string;
+  statusIcon: string;
+  currentSession: DroneSession | null;
+  recentSessions: DroneSession[];
+}
+
+/**
  * Core TUI state interface.
  * All mutable state is wrapped in signals for reactivity.
  */
@@ -139,6 +163,15 @@ export interface TuiState {
   isCreatingNextUp: Signal<boolean>;
   newNextUpTitle: Signal<string>;
 
+  // Drones state
+  drones: Signal<Drone[]>;
+  selectedDroneIndex: Signal<number>;
+  droneSessions: Signal<Map<string, DroneSession[]>>;
+  droneEvents: Signal<Map<string, WorkerEvent[]>>;
+  isCreatingDrone: Signal<boolean>;
+  newDroneName: Signal<string>;
+  newDronePrompt: Signal<string>;
+
   // Computed values
   selectedThread: Computed<Thread | null>;
   filteredThreads: Computed<Thread[]>;
@@ -150,6 +183,8 @@ export interface TuiState {
   bugListItems: Computed<BugListItem[]>;
   selectedNextUp: Computed<NextUp | null>;
   nextUpListItems: Computed<NextUpListItem[]>;
+  selectedDrone: Computed<Drone | null>;
+  droneListItems: Computed<DroneListItem[]>;
 
   // UI state
   shouldQuit: Signal<boolean>;
@@ -242,6 +277,15 @@ export function createTuiState(): TuiState {
   const selectedNextUpIndex = new Signal<number>(0);
   const isCreatingNextUp = new Signal<boolean>(false);
   const newNextUpTitle = new Signal<string>("");
+
+  // Drones state
+  const drones = new Signal<Drone[]>([]);
+  const selectedDroneIndex = new Signal<number>(0);
+  const droneSessions = new Signal<Map<string, DroneSession[]>>(new Map());
+  const droneEvents = new Signal<Map<string, WorkerEvent[]>>(new Map());
+  const isCreatingDrone = new Signal<boolean>(false);
+  const newDroneName = new Signal<string>("");
+  const newDronePrompt = new Signal<string>("");
 
   // UI state
   const shouldQuit = new Signal<boolean>(false);
@@ -413,6 +457,53 @@ export function createTuiState(): TuiState {
     });
   });
 
+  // Computed: get currently selected drone
+  const selectedDrone = new Computed<Drone | null>(() => {
+    const allDrones = drones.value;
+    const index = selectedDroneIndex.value;
+    if (index >= 0 && index < allDrones.length) {
+      return allDrones[index];
+    }
+    return null;
+  });
+
+  // Computed: drone list items with display data
+  const droneListItems = new Computed<DroneListItem[]>(() => {
+    const allDrones = drones.value;
+    const sessions = droneSessions.value;
+
+    return allDrones.map((drone) => {
+      // Truncate name to max 30 chars
+      const maxNameLength = 30;
+      const nameTruncated = drone.name.length > maxNameLength
+        ? drone.name.substring(0, maxNameLength - 1) + "~"
+        : drone.name;
+
+      // Determine status icon
+      let statusIcon: string;
+      const droneSessions = sessions.get(drone.id) || [];
+      const currentSession = droneSessions.find(s => s.status === 'running');
+
+      if (currentSession) {
+        statusIcon = '*'; // Running session
+      } else if (drone.status === 'active') {
+        statusIcon = ' '; // Active but no session
+      } else if (drone.status === 'paused') {
+        statusIcon = 'o'; // Paused
+      } else {
+        statusIcon = '.'; // Archived
+      }
+
+      return {
+        ...drone,
+        nameTruncated,
+        statusIcon,
+        currentSession: currentSession || null,
+        recentSessions: droneSessions.slice(0, 5),
+      };
+    });
+  });
+
   return {
     activeTab,
     focusedPane,
@@ -434,6 +525,13 @@ export function createTuiState(): TuiState {
     selectedNextUpIndex,
     isCreatingNextUp,
     newNextUpTitle,
+    drones,
+    selectedDroneIndex,
+    droneSessions,
+    droneEvents,
+    isCreatingDrone,
+    newDroneName,
+    newDronePrompt,
     selectedThread,
     filteredThreads,
     threadListItems,
@@ -444,6 +542,8 @@ export function createTuiState(): TuiState {
     bugListItems,
     selectedNextUp,
     nextUpListItems,
+    selectedDrone,
+    droneListItems,
     shouldQuit,
     isLoading,
     statusMessage,
@@ -526,6 +626,19 @@ export interface TuiActions {
   archiveNextUpItem: () => void;
   deleteNextUpItem: () => void;
   saveNextUpContent: (id: string, content: string) => void;
+
+  // Drone operations
+  loadDrones: () => void;
+  loadDroneDetails: (drone: Drone) => void;
+  selectDrone: (index: number) => void;
+  moveDroneSelection: (delta: number) => void;
+  startCreateDrone: () => void;
+  updateNewDroneName: (name: string) => void;
+  updateNewDronePrompt: (prompt: string) => void;
+  confirmCreateDrone: () => void;
+  cancelCreateDrone: () => void;
+  archiveDroneItem: () => void;
+  deleteDroneItem: () => void;
 
   // Auto-refresh
   refreshAll: () => void;
@@ -1353,6 +1466,10 @@ export function createTuiActions(state: TuiState): TuiActions {
       if (state.activeTab.value === "next-ups") {
         this.loadNextUps();
       }
+      // Also refresh drones when on drones tab
+      if (state.activeTab.value === "drones") {
+        this.loadDrones();
+      }
     },
 
     setStatusMessage(message: string) {
@@ -1567,6 +1684,157 @@ export function createTuiActions(state: TuiState): TuiActions {
       updated[index] = { ...crumb, summary };
       state.breadcrumbs.value = updated;
       this.setStatusMessage("Breadcrumb updated");
+    },
+
+    // Drone operations
+    loadDrones() {
+      state.isLoading.value = true;
+      try {
+        const droneList = listDrones();
+        state.drones.value = droneList;
+
+        // Load sessions for each drone
+        const sessionsMap = new Map<string, DroneSession[]>();
+        for (const drone of droneList) {
+          const sessions = listDroneSessions(drone.id, 10);
+          sessionsMap.set(drone.id, sessions);
+        }
+        state.droneSessions.value = sessionsMap;
+
+        // Reset selection if out of bounds
+        if (state.selectedDroneIndex.value >= droneList.length) {
+          state.selectedDroneIndex.value = Math.max(0, droneList.length - 1);
+        }
+
+        // Load details for selected drone
+        const selected = state.selectedDrone.value;
+        if (selected) {
+          this.loadDroneDetails(selected);
+        }
+      } finally {
+        state.isLoading.value = false;
+      }
+    },
+
+    loadDroneDetails(drone: Drone) {
+      // Load worker events for the current session (if any)
+      const currentSession = getCurrentSession(drone.id);
+      if (currentSession?.worker_id) {
+        const events = getWorkerEvents(currentSession.worker_id, { limit: 50 });
+        const eventsMap = new Map(state.droneEvents.value);
+        eventsMap.set(drone.id, events);
+        state.droneEvents.value = eventsMap;
+      } else {
+        // Clear events if no active session
+        const eventsMap = new Map(state.droneEvents.value);
+        eventsMap.set(drone.id, []);
+        state.droneEvents.value = eventsMap;
+      }
+    },
+
+    selectDrone(index: number) {
+      const droneList = state.drones.value;
+      if (index >= 0 && index < droneList.length) {
+        state.selectedDroneIndex.value = index;
+        this.loadDroneDetails(droneList[index]);
+      }
+    },
+
+    moveDroneSelection(delta: number) {
+      const droneList = state.drones.value;
+      const newIndex = state.selectedDroneIndex.value + delta;
+      if (newIndex >= 0 && newIndex < droneList.length) {
+        this.selectDrone(newIndex);
+      }
+    },
+
+    startCreateDrone() {
+      state.isCreatingDrone.value = true;
+      state.newDroneName.value = "";
+      state.newDronePrompt.value = "";
+    },
+
+    updateNewDroneName(name: string) {
+      state.newDroneName.value = name;
+    },
+
+    updateNewDronePrompt(prompt: string) {
+      state.newDronePrompt.value = prompt;
+    },
+
+    confirmCreateDrone() {
+      const name = state.newDroneName.value.trim();
+      const prompt = state.newDronePrompt.value.trim();
+
+      // Validate kebab-case
+      if (!/^[a-z][a-z0-9]*(-[a-z0-9]+)*$/.test(name)) {
+        this.setStatusMessage("Name must be kebab-case (e.g., lint-fixer)");
+        return;
+      }
+
+      // Check if exists
+      const existing = getDrone(name);
+      if (existing) {
+        this.setStatusMessage(`Drone "${name}" already exists`);
+        return;
+      }
+
+      if (!prompt) {
+        this.setStatusMessage("Prompt cannot be empty");
+        return;
+      }
+
+      // Create drone
+      createDrone(name, prompt);
+
+      state.isCreatingDrone.value = false;
+      state.newDroneName.value = "";
+      state.newDronePrompt.value = "";
+      this.loadDrones();
+      this.setStatusMessage(`Drone "${name}" created`);
+    },
+
+    cancelCreateDrone() {
+      state.isCreatingDrone.value = false;
+      state.newDroneName.value = "";
+      state.newDronePrompt.value = "";
+    },
+
+    archiveDroneItem() {
+      const drone = state.selectedDrone.value;
+      if (!drone) return;
+
+      // Check if drone has a running session
+      const currentSession = getCurrentSession(drone.id);
+      if (currentSession && currentSession.status === 'running') {
+        this.setStatusMessage("Cannot archive: drone has running session");
+        return;
+      }
+
+      archiveDrone(drone.id);
+      this.loadDrones();
+      this.setStatusMessage(`Drone "${drone.name}" archived`);
+    },
+
+    deleteDroneItem() {
+      const drone = state.selectedDrone.value;
+      if (!drone) return;
+
+      // Check if drone has a running session
+      const currentSession = getCurrentSession(drone.id);
+      if (currentSession && currentSession.status === 'running') {
+        this.setStatusMessage("Cannot delete: drone has running session");
+        return;
+      }
+
+      this.showConfirmation(
+        `Delete drone "${drone.name}"? This will remove all sessions.`,
+        () => {
+          deleteDrone(drone.id);
+          this.loadDrones();
+          this.setStatusMessage(`Drone "${drone.name}" deleted`);
+        }
+      );
     },
   };
 }

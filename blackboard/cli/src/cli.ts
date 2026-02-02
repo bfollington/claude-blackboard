@@ -47,6 +47,9 @@ import {
   droneEditCommand,
   droneArchiveCommand,
   droneDeleteCommand,
+  droneStartCommand,
+  droneStopCommand,
+  droneLogsCommand,
 } from "./commands/mod.ts";
 
 /**
@@ -104,6 +107,9 @@ const droneCommand = new Command()
     console.log("  list               List all drones");
     console.log("  show <name>        Show drone details and recent sessions");
     console.log("  edit <name>        Edit drone prompt in $EDITOR");
+    console.log("  start <name>       Start a drone session");
+    console.log("  stop <name>        Stop a running drone session");
+    console.log("  logs <name>        View logs for a running drone");
     console.log("  archive <name>     Archive a drone");
     console.log("  delete <name>      Delete a drone permanently");
   })
@@ -160,6 +166,52 @@ const droneCommand = new Command()
   .option("--force", "Skip confirmation prompt")
   .action(async (options: { force?: boolean; quiet?: boolean }, name: string) => {
     await droneDeleteCommand(name, { force: options.force, quiet: options.quiet });
+  })
+  .reset()
+  .command("start", "Start a drone session")
+  .arguments("<name:string>")
+  .option("--max-iterations <n:number>", "Override max iterations")
+  .option("--cooldown <seconds:number>", "Override cooldown seconds")
+  .option("--auth <mode:string>", "Auth mode: oauth, env, or config (auto-detects if omitted)")
+  .option("--api-key <key:string>", "Anthropic API key")
+  .option("--repo <path:string>", "Git workspace to mount")
+  .option("--memory <size:string>", "Container memory limit", { default: "1g" })
+  .option("--image <name:string>", "Worker image", { default: "blackboard-worker:latest" })
+  .option("--build", "Build worker image before spawning")
+  .action(async (options: { maxIterations?: number; cooldown?: number; auth?: string; apiKey?: string; repo?: string; memory?: string; image?: string; build?: boolean; quiet?: boolean }, name: string) => {
+    await droneStartCommand(name, {
+      maxIterations: options.maxIterations,
+      cooldownSeconds: options.cooldown,
+      auth: options.auth,
+      apiKey: options.apiKey,
+      repo: options.repo,
+      memory: options.memory,
+      image: options.image,
+      build: options.build,
+      quiet: options.quiet,
+    });
+  })
+  .reset()
+  .command("stop", "Stop a running drone session")
+  .arguments("<name:string>")
+  .action(async (options: { quiet?: boolean }, name: string) => {
+    await droneStopCommand(name, { quiet: options.quiet });
+  })
+  .reset()
+  .command("logs", "View logs for a running drone")
+  .arguments("<name:string>")
+  .option("-f, --follow", "Follow log output")
+  .option("--tool <name:string>", "Filter by tool name")
+  .option("--file <path:string>", "Filter by file path")
+  .option("--limit <n:number>", "Limit number of events")
+  .action(async (options: { follow?: boolean; tool?: string; file?: string; limit?: number; json?: boolean }, name: string) => {
+    await droneLogsCommand(name, {
+      follow: options.follow,
+      tool: options.tool,
+      file: options.file,
+      limit: options.limit,
+      json: options.json,
+    });
   });
 
 /**
