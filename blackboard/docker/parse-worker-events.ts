@@ -7,7 +7,7 @@
  * Usage: claude --output-format stream-json | parse-worker-events.ts <worker_id> <iteration> <db_path>
  */
 
-import { Database } from "jsr:@db/sqlite@0.11";
+import { Database } from "jsr:@db/sqlite@0.12";
 
 const WORKER_ID = Deno.args[0];
 const ITERATION = parseInt(Deno.args[1], 10);
@@ -90,53 +90,65 @@ function truncateOutput(output: string, maxLength = 500): string {
 }
 
 /**
- * Process a stream-json event from Claude.
+ * Process a stream-json event from Claude CLI.
+ *
+ * Claude CLI --output-format stream-json emits message-level events:
+ * - {"type":"assistant","message":{...}} - assistant messages with tool_use or text
+ * - {"type":"user","message":{...}} - user messages with tool_result
+ * - {"type":"result",...} - final result
  */
 function processEvent(line: string): void {
   try {
     const event = JSON.parse(line);
 
-    // Handle message_start events
-    if (event.type === "message_start") {
-      // Could track message metadata if needed
-      return;
-    }
-
-    // Handle content_block_start for tool_use
-    if (event.type === "content_block_start") {
-      const block = event.content_block;
-      if (block?.type === "tool_use") {
-        insertEvent({
-          event_type: "tool_call",
-          tool_name: block.name,
-          tool_input: JSON.stringify(block.input || {}),
-          file_path: extractFilePath(block.name, block.input),
-        });
+    // Handle assistant messages (tool calls and text)
+    if (event.type === "assistant" && event.message?.content) {
+      const content = event.message.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === "tool_use") {
+            insertEvent({
+              event_type: "tool_call",
+              tool_name: block.name,
+              tool_input: JSON.stringify(block.input || {}),
+              file_path: extractFilePath(block.name, block.input),
+            });
+          } else if (block.type === "text" && block.text) {
+            insertEvent({
+              event_type: "text",
+              tool_output_preview: truncateOutput(block.text),
+            });
+          }
+        }
       }
       return;
     }
 
-    // Handle content_block_delta for text chunks
-    if (event.type === "content_block_delta") {
-      const delta = event.delta;
-      if (delta?.type === "text_delta" && delta.text) {
-        // Store text deltas (could be tool thinking or responses)
-        insertEvent({
-          event_type: "text",
-          tool_output_preview: truncateOutput(delta.text),
-        });
+    // Handle user messages (tool results)
+    if (event.type === "user" && event.message?.content) {
+      const content = event.message.content;
+      if (Array.isArray(content)) {
+        for (const block of content) {
+          if (block.type === "tool_result") {
+            insertEvent({
+              event_type: "tool_result",
+              tool_name: block.tool_use_id || undefined,
+              tool_output_preview: typeof block.content === "string"
+                ? truncateOutput(block.content)
+                : truncateOutput(JSON.stringify(block.content)),
+            });
+          }
+        }
       }
       return;
     }
 
-    // Handle message_delta for stop reasons
-    if (event.type === "message_delta") {
-      if (event.delta?.stop_reason) {
-        insertEvent({
-          event_type: "system",
-          tool_output_preview: `stop_reason: ${event.delta.stop_reason}`,
-        });
-      }
+    // Handle final result
+    if (event.type === "result") {
+      insertEvent({
+        event_type: "system",
+        tool_output_preview: `result: ${event.subtype || "unknown"} (${event.duration_ms || 0}ms)`,
+      });
       return;
     }
 
@@ -146,26 +158,6 @@ function processEvent(line: string): void {
         event_type: "error",
         tool_output_preview: JSON.stringify(event.error || event),
       });
-      return;
-    }
-
-    // For tool results, we need to look at the message content
-    // These come in as regular message objects with role=user
-    if (event.type === "message" && event.role === "user") {
-      const content = event.content;
-      if (Array.isArray(content)) {
-        for (const block of content) {
-          if (block.type === "tool_result") {
-            insertEvent({
-              event_type: "tool_result",
-              tool_name: block.tool_use_id ? `result:${block.tool_use_id}` : undefined,
-              tool_output_preview: typeof block.content === "string"
-                ? truncateOutput(block.content)
-                : truncateOutput(JSON.stringify(block.content)),
-            });
-          }
-        }
-      }
       return;
     }
 
