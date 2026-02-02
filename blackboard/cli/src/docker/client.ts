@@ -22,6 +22,25 @@ export interface ContainerOptions {
   envVars?: Record<string, string>; // Additional environment variables to pass
 }
 
+export interface DroneContainerOptions {
+  image: string;
+  droneName: string;
+  sessionId: string;
+  dronePrompt: string;
+  dbDir: string;           // Host path to .claude/ dir (mounts as /app/db)
+  repoDir?: string;        // Host path to git workspace (mounts as /app/repo)
+  authMode: 'env' | 'config' | 'oauth';
+  apiKey?: string;         // When authMode=env
+  oauthToken?: string;     // When authMode=oauth
+  claudeConfigDir?: string; // When authMode=config (default: ~/.claude)
+  maxIterations?: number;
+  cooldownSeconds?: number;
+  memory?: string;         // Default: "512m"
+  workerId: string;        // Pre-generated worker ID
+  labels?: Record<string, string>;
+  envVars?: Record<string, string>; // Additional environment variables to pass
+}
+
 export interface ContainerInfo {
   id: string;
   name: string;
@@ -479,4 +498,91 @@ export async function cleanupOrphans(activeWorkerIds: string[]): Promise<number>
   }
 
   return removed;
+}
+
+/**
+ * Spawn a drone container.
+ * Similar to dockerRun but uses drone-specific entrypoint and environment.
+ * @throws Error if docker run fails
+ */
+export async function spawnDroneContainer(options: DroneContainerOptions): Promise<string> {
+  const args = [
+    "run",
+    "--detach",
+    "--name",
+    `blackboard-drone-${options.sessionId}`,
+    "--label",
+    "blackboard.managed=true",
+    "--label",
+    "blackboard.type=drone",
+    "--label",
+    `blackboard.drone-name=${options.droneName}`,
+    "--label",
+    `blackboard.session-id=${options.sessionId}`,
+    "--label",
+    `blackboard.worker-id=${options.workerId}`,
+    "--memory",
+    options.memory || "1g",
+    "-v",
+    `${options.dbDir}:/app/db:rw`,
+    "--entrypoint",
+    "/app/drone-entrypoint.sh",
+  ];
+
+  // Add repo volume if provided
+  if (options.repoDir) {
+    args.push("-v", `${options.repoDir}:/app/repo:rw`);
+  }
+
+  // Add environment variables
+  args.push("-e", `DRONE_NAME=${options.droneName}`);
+  args.push("-e", `SESSION_ID=${options.sessionId}`);
+  args.push("-e", `WORKER_ID=${options.workerId}`);
+  args.push("-e", `DRONE_PROMPT=${options.dronePrompt}`);
+  args.push("-e", `MAX_ITERATIONS=${options.maxIterations || 100}`);
+  args.push("-e", `COOLDOWN_SECONDS=${options.cooldownSeconds || 60}`);
+
+  // Handle authentication mode
+  if (options.authMode === "env") {
+    const apiKey = options.apiKey || Deno.env.get("ANTHROPIC_API_KEY");
+    if (apiKey) {
+      args.push("-e", `ANTHROPIC_API_KEY=${apiKey}`);
+    }
+  } else if (options.authMode === "oauth") {
+    if (options.oauthToken) {
+      args.push("-e", `CLAUDE_CODE_OAUTH_TOKEN=${options.oauthToken}`);
+    }
+  } else if (options.authMode === "config") {
+    const configDir = options.claudeConfigDir || `${Deno.env.get("HOME")}/.claude`;
+    args.push("-v", `${configDir}:/root/.claude:ro`);
+  }
+
+  // Add additional environment variables from envVars
+  if (options.envVars) {
+    for (const [key, value] of Object.entries(options.envVars)) {
+      // Skip ANTHROPIC_API_KEY if already set above
+      if (key === "ANTHROPIC_API_KEY") continue;
+      args.push("-e", `${key}=${value}`);
+    }
+  }
+
+  // Add custom labels if provided
+  if (options.labels) {
+    for (const [key, value] of Object.entries(options.labels)) {
+      args.push("--label", `${key}=${value}`);
+    }
+  }
+
+  // Add image as final argument
+  args.push(options.image);
+
+  const result = await runDocker(args);
+
+  if (result.code !== 0) {
+    throw new Error(
+      `Docker run failed (exit ${result.code}): ${result.stderr || result.stdout}`
+    );
+  }
+
+  return result.stdout;
 }

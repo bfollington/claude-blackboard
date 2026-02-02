@@ -27,6 +27,7 @@ const TABS: TabConfig[] = [
   { id: "bugs", label: "Bugs", shortcut: "2" },
   { id: "reflections", label: "Reflections", shortcut: "3" },
   { id: "next-ups", label: "Next-Ups", shortcut: "4" },
+  { id: "drones", label: "Drones", shortcut: "5" },
 ];
 
 /**

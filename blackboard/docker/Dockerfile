@@ -17,8 +17,9 @@ COPY blackboard/schema.sql /app/schema.sql
 
 # Copy entrypoint and parser scripts
 COPY blackboard/docker/entrypoint.sh /app/entrypoint.sh
+COPY blackboard/docker/drone-entrypoint.sh /app/drone-entrypoint.sh
 COPY blackboard/docker/parse-worker-events.ts /app/parse-worker-events.ts
-RUN chmod +x /app/entrypoint.sh /app/parse-worker-events.ts
+RUN chmod +x /app/entrypoint.sh /app/drone-entrypoint.sh /app/parse-worker-events.ts
 
 # Set up .claude directory structure with subagent definitions
 RUN mkdir -p /app/claude-config/agents

@@ -40,4 +40,7 @@ export {
   droneEditCommand,
   droneArchiveCommand,
   droneDeleteCommand,
+  droneStartCommand,
+  droneStopCommand,
+  droneLogsCommand,
 } from "./drone.ts";

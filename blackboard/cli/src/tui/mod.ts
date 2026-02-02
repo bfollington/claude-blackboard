@@ -23,6 +23,9 @@ import { createNextUpsList } from "./components/next-ups-list.ts";
 import { createNextUpInput } from "./components/next-up-input.ts";
 import { createNextUpPreview } from "./components/next-up-preview.ts";
 import { createConfirmDialog } from "./components/confirm-dialog.ts";
+import { createDroneList } from "./components/drone-list.ts";
+import { createDroneDetail } from "./components/drone-detail.ts";
+import { createDroneInput } from "./components/drone-input.ts";
 import { debounce } from "./utils/debounce.ts";
 
 export interface TuiOptions {
@@ -197,6 +200,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
   let threadTabCleanups: Array<() => void> = [];
   let bugsTabCleanups: Array<() => void> = [];
   let nextUpsTabCleanups: Array<() => void> = [];
+  let dronesTabCleanups: Array<() => void> = [];
 
   // Ensure terminal is restored on exit
   const cleanup = () => {
@@ -331,6 +335,45 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       nextUpsTabCleanups.push(cleanupNextUpsList, cleanupNextUpPreview);
     };
 
+    const renderDronesTab = () => {
+      // Clean up any existing drones tab components
+      dronesTabCleanups.forEach(cleanup => cleanup());
+      dronesTabCleanups = [];
+
+      // Load drones
+      actions.loadDrones();
+
+      const terminalSize = getCurrentSize();
+      const leftPanelWidth = getCurrentLeftPanelWidth();
+
+      // Split view: list on left (25%), detail on right (75%)
+      const cleanupDroneList = createDroneList({
+        tui,
+        state,
+        rectangle: {
+          column: 0,
+          row: 1,
+          width: leftPanelWidth,
+          height: terminalSize.rows - 2,
+        },
+      });
+
+      const detailPanelColumn = leftPanelWidth + 1;
+      const detailPanelWidth = terminalSize.columns - detailPanelColumn;
+      const cleanupDroneDetail = createDroneDetail({
+        tui,
+        state,
+        rectangle: {
+          column: detailPanelColumn,
+          row: 1,
+          width: detailPanelWidth,
+          height: terminalSize.rows - 2,
+        },
+      });
+
+      dronesTabCleanups.push(cleanupDroneList, cleanupDroneDetail);
+    };
+
     // Subscribe to tab changes to switch components
     state.activeTab.subscribe((tab) => {
       if (tab === "threads") {
@@ -339,6 +382,8 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         bugsTabCleanups = [];
         nextUpsTabCleanups.forEach(cleanup => cleanup());
         nextUpsTabCleanups = [];
+        dronesTabCleanups.forEach(cleanup => cleanup());
+        dronesTabCleanups = [];
         renderThreadsTab();
       } else if (tab === "bugs") {
         // Clean up other tabs, render bugs tab
@@ -346,6 +391,8 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         threadTabCleanups = [];
         nextUpsTabCleanups.forEach(cleanup => cleanup());
         nextUpsTabCleanups = [];
+        dronesTabCleanups.forEach(cleanup => cleanup());
+        dronesTabCleanups = [];
         renderBugsTab();
       } else if (tab === "next-ups") {
         // Clean up other tabs, render next-ups tab
@@ -353,7 +400,18 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         threadTabCleanups = [];
         bugsTabCleanups.forEach(cleanup => cleanup());
         bugsTabCleanups = [];
+        dronesTabCleanups.forEach(cleanup => cleanup());
+        dronesTabCleanups = [];
         renderNextUpsTab();
+      } else if (tab === "drones") {
+        // Clean up other tabs, render drones tab
+        threadTabCleanups.forEach(cleanup => cleanup());
+        threadTabCleanups = [];
+        bugsTabCleanups.forEach(cleanup => cleanup());
+        bugsTabCleanups = [];
+        nextUpsTabCleanups.forEach(cleanup => cleanup());
+        nextUpsTabCleanups = [];
+        renderDronesTab();
       }
       // Note: reflections tab not implemented yet
     });
@@ -363,6 +421,8 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       renderBugsTab();
     } else if (state.activeTab.value === "next-ups") {
       renderNextUpsTab();
+    } else if (state.activeTab.value === "drones") {
+      renderDronesTab();
     } else {
       renderThreadsTab();
     }
@@ -378,6 +438,8 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         renderBugsTab();
       } else if (activeTab === "next-ups") {
         renderNextUpsTab();
+      } else if (activeTab === "drones") {
+        renderDronesTab();
       }
     };
 
@@ -473,6 +535,33 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     // Initial check
     updateNextUpInput();
 
+    // Drone input overlay (conditionally rendered based on state)
+    const droneInputCleanups: Array<() => void> = [];
+    const updateDroneInput = () => {
+      if (state.isCreatingDrone.value && droneInputCleanups.length === 0) {
+        const cleanup = createDroneInput({
+          tui,
+          state,
+          onNameChange: (name) => actions.updateNewDroneName(name),
+          onPromptChange: (prompt) => actions.updateNewDronePrompt(prompt),
+          onConfirm: () => actions.confirmCreateDrone(),
+          onCancel: () => actions.cancelCreateDrone(),
+        });
+        droneInputCleanups.push(cleanup);
+      } else if (!state.isCreatingDrone.value && droneInputCleanups.length > 0) {
+        const cleanup = droneInputCleanups.pop();
+        cleanup?.();
+      }
+    };
+
+    // Watch for drone creation state changes
+    state.isCreatingDrone.subscribe(() => {
+      updateDroneInput();
+    });
+
+    // Initial check
+    updateDroneInput();
+
     // Confirmation dialog overlay (conditionally rendered based on state)
     const confirmDialogCleanups: Array<() => void> = [];
     const updateConfirmDialog = () => {
@@ -513,9 +602,10 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       const findActive = state.findState.value.isActive;
       const isCreatingThread = state.isCreatingThread.value;
       const isCreatingNextUp = state.isCreatingNextUp.value;
+      const isCreatingDrone = state.isCreatingDrone.value;
 
       // If any text input is active, only handle Escape (to cancel) - let input handle other keys
-      if (isCreatingThread || isCreatingNextUp) {
+      if (isCreatingThread || isCreatingNextUp || isCreatingDrone) {
         // Escape is handled by the input components themselves
         return;
       }
@@ -569,7 +659,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         return;
       }
 
-      // Tab switching: 1, 2, 3, 4
+      // Tab switching: 1, 2, 3, 4, 5
       if (event.key === "1") {
         actions.switchTab("threads");
         return;
@@ -584,6 +674,10 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       }
       if (event.key === "4") {
         actions.switchTab("next-ups");
+        return;
+      }
+      if (event.key === "5") {
+        actions.switchTab("drones");
         return;
       }
 
@@ -795,6 +889,68 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         return; // Don't process other keys when on next-ups tab
       }
 
+      // Drones tab navigation and actions
+      if (state.activeTab.value === "drones") {
+        const isDown = event.key === "j" || event.key === "down";
+        const isUp = event.key === "k" || event.key === "up";
+
+        if (isDown) { actions.moveDroneSelection(1); return; }
+        if (isUp) { actions.moveDroneSelection(-1); return; }
+
+        // Create new drone with 'n' (if not already creating)
+        if (event.key === "n" && !state.isCreatingDrone.value) {
+          actions.startCreateDrone();
+          return;
+        }
+
+        // Start session with 's'
+        if (event.key === "s" && !event.shift) {
+          const drone = state.selectedDrone.value;
+          if (drone) {
+            actions.setStatusMessage("Starting drone session (not yet implemented)");
+            // TODO: Implement drone session start
+          }
+          return;
+        }
+
+        // Stop session with Shift+S
+        if (event.shift && event.key === "s") {
+          const drone = state.selectedDrone.value;
+          if (drone) {
+            actions.setStatusMessage("Stopping drone session (not yet implemented)");
+            // TODO: Implement drone session stop
+          }
+          return;
+        }
+
+        // Archive drone with 'a'
+        if (event.key === "a") {
+          actions.archiveDroneItem();
+          return;
+        }
+
+        // Delete drone with 'd'
+        if (event.key === "d") {
+          actions.deleteDroneItem();
+          return;
+        }
+
+        // View logs with 'l'
+        if (event.key === "l") {
+          const drone = state.selectedDrone.value;
+          const items = state.droneListItems.value;
+          const item = items.find(i => i.id === drone?.id);
+          if (item?.currentSession?.worker_id) {
+            actions.setStatusMessage("Use 'blackboard logs " + item.currentSession.worker_id.slice(0, 7) + "' in terminal");
+          } else {
+            actions.setStatusMessage("No active session to view logs for");
+          }
+          return;
+        }
+
+        return; // Don't process other keys when on drones tab
+      }
+
       // Navigation and actions based on focused pane (threads tab only)
       handlePaneKeyPress(event, state, actions);
     });
@@ -816,11 +972,13 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
     findInputCleanups.pop()?.();
     threadInputCleanups.pop()?.();
     nextUpInputCleanups.pop()?.();
+    droneInputCleanups.pop()?.();
     confirmDialogCleanups.pop()?.();
     cleanupStatusBar();
     threadTabCleanups.forEach(cleanup => cleanup());
     bugsTabCleanups.forEach(cleanup => cleanup());
     nextUpsTabCleanups.forEach(cleanup => cleanup());
+    dronesTabCleanups.forEach(cleanup => cleanup());
     cleanupTabBar();
 
     // Cancel any pending debounced resize
