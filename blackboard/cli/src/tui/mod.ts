@@ -907,8 +907,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         if (event.key === "s" && !event.shift) {
           const drone = state.selectedDrone.value;
           if (drone) {
-            actions.setStatusMessage("Starting drone session (not yet implemented)");
-            // TODO: Implement drone session start
+            actions.startDroneSession(drone.id);
           }
           return;
         }
@@ -917,8 +916,7 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
         if (event.shift && event.key === "s") {
           const drone = state.selectedDrone.value;
           if (drone) {
-            actions.setStatusMessage("Stopping drone session (not yet implemented)");
-            // TODO: Implement drone session stop
+            actions.stopDroneSession(drone.id);
           }
           return;
         }

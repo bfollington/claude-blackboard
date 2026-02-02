@@ -54,14 +54,16 @@ import {
   deleteDrone,
   getCurrentSession,
   listDroneSessions,
+  createDroneSession,
+  updateSessionStatus,
 } from "../db/drone-queries.ts";
 import { getWorkerEvents } from "../db/worker-queries.ts";
 import { getActiveWorkers, updateWorkerStatus, insertWorker } from "../db/worker-queries.ts";
-import { dockerRun, dockerKill, dockerBuild, dockerImageExists, isDockerAvailable, isContainerRunning, parseEnvFile, resolveDockerfile, reconcileWorkers, type ContainerOptions } from "../docker/client.ts";
+import { dockerRun, dockerKill, dockerBuild, dockerImageExists, isDockerAvailable, isContainerRunning, parseEnvFile, resolveDockerfile, reconcileWorkers, spawnDroneContainer, type ContainerOptions } from "../docker/client.ts";
 import { join, dirname, fromFileUrl } from "jsr:@std/path";
 import { generateId } from "../utils/id.ts";
 import { extractAndValidateOAuthToken } from "../utils/oauth.ts";
-import { resolveDbPath } from "../db/connection.ts";
+import { resolveDbPath, getDb } from "../db/connection.ts";
 import { getTasksForThreadWithHistory, type ClaudeTask } from "../utils/tasks.ts";
 
 // Tab identifiers for the main navigation
@@ -639,6 +641,8 @@ export interface TuiActions {
   cancelCreateDrone: () => void;
   archiveDroneItem: () => void;
   deleteDroneItem: () => void;
+  startDroneSession: (droneId: string) => Promise<void>;
+  stopDroneSession: (droneId: string) => Promise<void>;
 
   // Auto-refresh
   refreshAll: () => void;
@@ -1835,6 +1839,190 @@ export function createTuiActions(state: TuiState): TuiActions {
           this.setStatusMessage(`Drone "${drone.name}" deleted`);
         }
       );
+    },
+
+    async startDroneSession(droneId: string) {
+      const drone = getDrone(droneId);
+      if (!drone) {
+        this.setStatusMessage("Drone not found");
+        return;
+      }
+
+      // Check if drone already has a running session
+      const currentSession = getCurrentSession(drone.id);
+      if (currentSession) {
+        this.setStatusMessage(`Drone already running (${currentSession.id.slice(0, 8)})`);
+        return;
+      }
+
+      // Check Docker availability
+      this.setStatusMessage("Checking Docker...");
+      const dockerAvailable = await isDockerAvailable();
+      if (!dockerAvailable) {
+        this.setStatusMessage("Docker not available - is Docker running?");
+        return;
+      }
+
+      // Check/build image
+      const imageName = "blackboard-worker:latest";
+      const imageExists = await dockerImageExists(imageName);
+      if (!imageExists) {
+        this.setStatusMessage("Building worker image (first run)...");
+
+        const pluginRoot = Deno.env.get("CLAUDE_PLUGIN_ROOT") ||
+          join(dirname(fromFileUrl(import.meta.url)), "..", "..", "..", "..");
+        const projectRoot = Deno.cwd();
+        const dockerfilePath = await resolveDockerfile(projectRoot, pluginRoot);
+
+        if (!dockerfilePath) {
+          this.setStatusMessage("No Dockerfile found - run 'blackboard init-worker'");
+          return;
+        }
+
+        try {
+          await dockerBuild(imageName, pluginRoot, dockerfilePath);
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          this.setStatusMessage(`Build failed: ${msg.slice(0, 40)}`);
+          return;
+        }
+      }
+
+      // Auto-detect authentication
+      let authMode: "env" | "oauth";
+      let apiKey: string | undefined;
+      let oauthToken: string | undefined;
+
+      const oauthResult = await extractAndValidateOAuthToken(true);
+      if (oauthResult) {
+        authMode = "oauth";
+        oauthToken = oauthResult.token;
+        this.setStatusMessage("Using OAuth authentication...");
+      } else {
+        // Fall back to API key
+        apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+        if (!apiKey) {
+          this.setStatusMessage("No auth - run 'claude login' or set ANTHROPIC_API_KEY");
+          return;
+        }
+        authMode = "env";
+        this.setStatusMessage("Using API key authentication...");
+      }
+
+      // Generate IDs
+      const sessionId = generateId();
+      const workerId = generateId();
+
+      // Resolve paths
+      const dbPath = resolveDbPath();
+      const dbDir = dirname(dbPath);
+      const repoDir = Deno.cwd();
+
+      // Create session in database
+      const shortSessionId = sessionId.slice(0, 8);
+      const gitBranch = `drones/${drone.name}/${shortSessionId}`;
+
+      try {
+        createDroneSession(drone.id, workerId, gitBranch);
+
+        // Update session status to running
+        updateSessionStatus(sessionId, "running");
+
+        // Create worker record
+        insertWorker({
+          id: workerId,
+          container_id: "", // Will be updated after container starts
+          thread_id: null as any, // Drones don't belong to threads
+          status: "running",
+          auth_mode: authMode,
+          iteration: 0,
+          max_iterations: drone.max_iterations,
+        });
+
+        this.setStatusMessage(`Spawning drone "${drone.name}"...`);
+
+        // Spawn container
+        const containerId = await spawnDroneContainer({
+          image: imageName,
+          droneName: drone.name,
+          sessionId,
+          dronePrompt: drone.prompt,
+          dbDir,
+          repoDir,
+          authMode,
+          apiKey,
+          oauthToken,
+          maxIterations: drone.max_iterations,
+          cooldownSeconds: drone.cooldown_seconds,
+          memory: "1g",
+          workerId,
+          labels: {
+            "blackboard.drone-name": drone.name,
+          },
+        });
+
+        // Update worker with container ID
+        const db = getDb();
+        db.exec(`UPDATE workers SET container_id = '${containerId}' WHERE id = '${workerId}'`);
+
+        // Refresh drones to show new session
+        this.loadDrones();
+        this.setStatusMessage(`Drone "${drone.name}" started (${shortSessionId})`);
+      } catch (error) {
+        // Clean up on failure
+        try {
+          updateSessionStatus(sessionId, "failed", "container_spawn_failed");
+          const db = getDb();
+          db.exec(`UPDATE workers SET status = 'failed' WHERE id = '${workerId}'`);
+        } catch {
+          // Ignore cleanup errors
+        }
+        const msg = error instanceof Error ? error.message : String(error);
+        this.setStatusMessage(`Failed to start: ${msg.slice(0, 40)}`);
+      }
+    },
+
+    async stopDroneSession(droneId: string) {
+      const drone = getDrone(droneId);
+      if (!drone) {
+        this.setStatusMessage("Drone not found");
+        return;
+      }
+
+      // Get current session
+      const currentSession = getCurrentSession(drone.id);
+      if (!currentSession) {
+        this.setStatusMessage(`Drone "${drone.name}" is not running`);
+        return;
+      }
+
+      try {
+        // Update session status to stopped
+        updateSessionStatus(currentSession.id, "stopped", "manual");
+
+        // Get worker and kill container
+        const db = getDb();
+        const stmt = db.prepare("SELECT * FROM workers WHERE id = ?");
+        const worker = stmt.get(currentSession.worker_id) as any;
+
+        if (worker?.container_id) {
+          try {
+            await dockerKill(worker.container_id);
+          } catch (error) {
+            // Container might already be stopped - not a critical error
+          }
+        }
+
+        // Update worker status
+        db.exec(`UPDATE workers SET status = 'killed' WHERE id = '${currentSession.worker_id}'`);
+
+        // Refresh drones to show stopped session
+        this.loadDrones();
+        this.setStatusMessage(`Drone "${drone.name}" stopped`);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        this.setStatusMessage(`Failed to stop: ${msg.slice(0, 40)}`);
+      }
     },
   };
 }
