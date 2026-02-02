@@ -12,6 +12,8 @@ import { migrate as migrateWorkers } from "./migrations/002_workers.ts";
 import { migrate as migrateOAuthAuthMode } from "./migrations/003_oauth_auth_mode.ts";
 import { migrate as migrateThreadSessions } from "./migrations/004_thread_sessions.ts";
 import { migrate as migrateTasks } from "./migrations/005_tasks.ts";
+import { migrate as migrateWorkerEvents } from "./migrations/006_worker_events.ts";
+import { migrate as migrateDrones } from "./migrations/007_drones.ts";
 
 let dbInstance: Database | null = null;
 
@@ -125,6 +127,8 @@ export function getDb(path?: string): Database {
     migrateOAuthAuthMode(dbInstance);
     migrateThreadSessions(dbInstance);
     migrateTasks(dbInstance);
+    migrateWorkerEvents(dbInstance);
+    migrateDrones(dbInstance);
   } catch {
     // Migrations are idempotent - errors mean already migrated
   }

@@ -10,6 +10,9 @@ export type BugReportStatus = 'open' | 'resolved' | 'wontfix';
 export type ThreadStatus = 'active' | 'paused' | 'completed' | 'archived';
 export type WorkerStatus = 'running' | 'completed' | 'failed' | 'killed';
 export type NextUpStatus = 'active' | 'archived' | 'launched';
+export type WorkerEventType = 'tool_call' | 'tool_result' | 'text' | 'error' | 'system';
+export type DroneStatus = 'active' | 'paused' | 'archived';
+export type DroneSessionStatus = 'running' | 'completed' | 'stopped' | 'failed';
 
 export interface Thread {
   id: string;
@@ -108,6 +111,43 @@ export interface Worker {
   auth_mode: 'env' | 'config' | 'oauth' | null;
   iteration: number;
   max_iterations: number;
+}
+
+export interface WorkerEvent {
+  id: number;
+  worker_id: string;
+  iteration: number;
+  timestamp: string;
+  event_type: WorkerEventType;
+  tool_name: string | null;
+  tool_input: string | null;
+  tool_output_preview: string | null;
+  file_path: string | null;
+  duration_ms: number | null;
+}
+
+export interface Drone {
+  id: string;
+  name: string;
+  prompt: string;
+  max_iterations: number;
+  timeout_minutes: number;
+  cooldown_seconds: number;
+  status: DroneStatus;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DroneSession {
+  id: string;
+  drone_id: string;
+  worker_id: string | null;
+  git_branch: string | null;
+  status: DroneSessionStatus;
+  iteration: number;
+  started_at: string;
+  ended_at: string | null;
+  stop_reason: string | null;
 }
 
 // View types
