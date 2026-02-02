@@ -33,3 +33,11 @@ export {
   stepReorderCommand,
 } from "./step.ts";
 export { initWorkerCommand } from "./init-worker.ts";
+export {
+  droneNewCommand,
+  droneListCommand,
+  droneShowCommand,
+  droneEditCommand,
+  droneArchiveCommand,
+  droneDeleteCommand,
+} from "./drone.ts";

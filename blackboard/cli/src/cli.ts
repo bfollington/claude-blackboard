@@ -41,6 +41,12 @@ import {
   stepRemoveCommand,
   stepReorderCommand,
   initWorkerCommand,
+  droneNewCommand,
+  droneListCommand,
+  droneShowCommand,
+  droneEditCommand,
+  droneArchiveCommand,
+  droneDeleteCommand,
 } from "./commands/mod.ts";
 
 /**
@@ -85,6 +91,71 @@ const threadCommand = new Command()
   .option("-q, --quiet", "Suppress non-essential output")
   .action(async (options: { db?: string; quiet?: boolean }, name: string, file?: string) => {
     await threadPlanCommand(name, { ...options, file });
+  });
+
+/**
+ * Drone subcommand group - manage autonomous worker configurations.
+ */
+const droneCommand = new Command()
+  .description("Manage autonomous worker configurations")
+  .action(() => {
+    console.log("Drone subcommand - use one of the available commands:");
+    console.log("  new <name>         Create a new drone");
+    console.log("  list               List all drones");
+    console.log("  show <name>        Show drone details and recent sessions");
+    console.log("  edit <name>        Edit drone prompt in $EDITOR");
+    console.log("  archive <name>     Archive a drone");
+    console.log("  delete <name>      Delete a drone permanently");
+  })
+  .command("new", "Create a new drone")
+  .arguments("<name:string>")
+  .option("--prompt <text:string>", "Drone prompt (inline)")
+  .option("--file <path:string>", "Read prompt from file")
+  .option("--max-iterations <n:number>", "Max iterations per session", { default: 100 })
+  .option("--timeout <minutes:number>", "Session timeout in minutes", { default: 60 })
+  .option("--cooldown <seconds:number>", "Cooldown between iterations", { default: 60 })
+  .action(async (options, name: string) => {
+    await droneNewCommand(name, {
+      prompt: options.prompt,
+      file: options.file,
+      maxIterations: options.maxIterations,
+      timeout: options.timeout,
+      cooldown: options.cooldown,
+    });
+  })
+  .reset()
+  .command("list", "List all drones")
+  .option("--status <status:string>", "Filter by status (active|paused|archived)")
+  .action(async (options: { status?: string }) => {
+    const listOptions = {
+      status: options.status as "active" | "paused" | "archived" | undefined,
+    };
+    await droneListCommand(listOptions);
+  })
+  .reset()
+  .command("show", "Show drone details and recent sessions")
+  .arguments("<name:string>")
+  .action(async (_options, name: string) => {
+    await droneShowCommand(name, {});
+  })
+  .reset()
+  .command("edit", "Edit drone prompt in $EDITOR")
+  .arguments("<name:string>")
+  .action(async (_options, name: string) => {
+    await droneEditCommand(name, {});
+  })
+  .reset()
+  .command("archive", "Archive a drone (soft delete)")
+  .arguments("<name:string>")
+  .action(async (_options, name: string) => {
+    await droneArchiveCommand(name, {});
+  })
+  .reset()
+  .command("delete", "Delete a drone permanently")
+  .arguments("<name:string>")
+  .option("--force", "Skip confirmation prompt")
+  .action(async (options: { force?: boolean }, name: string) => {
+    await droneDeleteCommand(name, options);
   });
 
 /**
@@ -301,6 +372,9 @@ export const cli = new Command()
   .option("-t, --tail <n:number>", "Show last N lines")
   .option("-f, --follow", "Follow log output")
   .option("-i, --iteration <n:number>", "Filter by iteration number")
+  .option("-e, --events", "Show structured events instead of raw logs")
+  .option("--tool <name:string>", "Filter by tool name (requires --events)")
+  .option("--file <path:string>", "Filter by file path (requires --events)")
   .action(async (options, workerId) => {
     await logsCommand(workerId, options);
   })
@@ -378,6 +452,10 @@ export const cli = new Command()
 
   // Step subcommand group
   .command("step", stepCommand)
+  .reset()
+
+  // Drone subcommand group
+  .command("drone", droneCommand)
   .reset()
 
   // Hook subcommand group

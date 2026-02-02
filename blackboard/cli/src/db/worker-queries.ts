@@ -5,7 +5,7 @@
  */
 
 import { getDb } from "./connection.ts";
-import type { Worker, WorkerStatus } from "../types/schema.ts";
+import type { Worker, WorkerStatus, WorkerEvent } from "../types/schema.ts";
 
 // ============================================================================
 // Workers
@@ -201,4 +201,123 @@ export function cleanupWorkerRecords(): number {
     db.exec("ROLLBACK");
     throw error;
   }
+}
+
+// ============================================================================
+// Worker Events
+// ============================================================================
+
+/**
+ * Inserts a new worker event record.
+ *
+ * @param event - WorkerEvent object to insert (id and timestamp will be auto-generated)
+ */
+export function insertWorkerEvent(
+  event: Omit<WorkerEvent, "id" | "timestamp">
+): void {
+  const db = getDb();
+
+  db.exec("BEGIN IMMEDIATE");
+
+  try {
+    const stmt = db.prepare(`
+      INSERT INTO worker_events (
+        worker_id, iteration, event_type, tool_name, tool_input,
+        tool_output_preview, file_path, duration_ms
+      )
+      VALUES (
+        :worker_id, :iteration, :event_type, :tool_name, :tool_input,
+        :tool_output_preview, :file_path, :duration_ms
+      )
+    `);
+    stmt.run({
+      worker_id: event.worker_id,
+      iteration: event.iteration,
+      event_type: event.event_type,
+      tool_name: event.tool_name ?? null,
+      tool_input: event.tool_input ?? null,
+      tool_output_preview: event.tool_output_preview ?? null,
+      file_path: event.file_path ?? null,
+      duration_ms: event.duration_ms ?? null,
+    });
+
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
+}
+
+/**
+ * Gets worker events with optional filtering and pagination.
+ *
+ * @param workerId - Worker ID
+ * @param options - Optional filters and pagination
+ * @returns Array of worker events
+ */
+export function getWorkerEvents(
+  workerId: string,
+  options?: {
+    limit?: number;
+    offset?: number;
+    toolName?: string;
+    filePath?: string;
+    iteration?: number;
+  }
+): WorkerEvent[] {
+  const db = getDb();
+
+  let query = `
+    SELECT * FROM worker_events
+    WHERE worker_id = :workerId
+  `;
+
+  const params: Record<string, any> = { workerId };
+
+  if (options?.toolName) {
+    query += " AND tool_name = :toolName";
+    params.toolName = options.toolName;
+  }
+
+  if (options?.filePath) {
+    query += " AND file_path = :filePath";
+    params.filePath = options.filePath;
+  }
+
+  if (options?.iteration !== undefined) {
+    query += " AND iteration = :iteration";
+    params.iteration = options.iteration;
+  }
+
+  query += " ORDER BY timestamp ASC, id ASC";
+
+  if (options?.limit !== undefined) {
+    query += " LIMIT :limit";
+    params.limit = options.limit;
+  }
+
+  if (options?.offset !== undefined) {
+    query += " OFFSET :offset";
+    params.offset = options.offset;
+  }
+
+  const stmt = db.prepare(query);
+  return stmt.all(params) as WorkerEvent[];
+}
+
+/**
+ * Gets the most recent worker event for a worker.
+ *
+ * @param workerId - Worker ID
+ * @returns Latest worker event or undefined if none found
+ */
+export function getLatestWorkerEvent(workerId: string): WorkerEvent | undefined {
+  const db = getDb();
+  const stmt = db.prepare(`
+    SELECT * FROM worker_events
+    WHERE worker_id = :workerId
+    ORDER BY timestamp DESC, id DESC
+    LIMIT 1
+  `);
+  return stmt.get({ workerId }) as WorkerEvent | undefined;
 }
