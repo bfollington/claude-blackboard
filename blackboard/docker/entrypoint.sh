@@ -107,6 +107,30 @@ Prompt: \"Implement step X: <description>. plan_id='<plan_id>' step_id='<step_id
 
 ## Your Workflow
 
+### 0. Check Plan State
+
+First, look at the \`steps\` array and \`plan_content\` field in your context above.
+
+**If the plan has steps** (the \`steps\` array is non-empty): Skip to \"1. Plan Your Batch\" below and follow the step-based workflow.
+
+**If the plan has NO steps but has plan_content**: The \`plan_content\` field IS your work. Execute it directly by spawning an implementer subagent:
+\`\`\`
+Task tool with subagent_type: \"blackboard:implementer\"
+Prompt: \"Execute this plan: <copy the plan_content value here>. plan_id='<plan_id>'\"
+\`\`\`
+IMPORTANT: Use the \`plan_content\` field from your context JSON - do NOT search for plan files in the repository.
+
+After the implementer completes:
+1. Record a breadcrumb summarizing what was done
+2. Mark the plan as completed: \`blackboard --db ${DB_PATH} query \"UPDATE plans SET status = 'completed' WHERE id = '<plan_id>'\"\`
+3. Output the completion promise
+
+**If the plan has NO steps AND no plan_content**: Record a breadcrumb noting the error state (\"Plan has no steps and no content\") and exit.
+
+---
+
+### Steps-Based Workflow
+
 Work on pending steps using subagents. For each iteration:
 
 ### 1. Plan Your Batch

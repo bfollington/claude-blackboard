@@ -204,8 +204,10 @@ export async function threadStatusCommand(
     const result: Record<string, unknown> = { ...thread };
 
     if (thread.current_plan_id) {
+      const plan = getPlanById(thread.current_plan_id);
       const steps = getStepsForPlan(thread.current_plan_id);
       const breadcrumbs = getRecentBreadcrumbs(thread.current_plan_id, 5);
+      result.plan_content = plan?.plan_markdown || null;
       result.steps = steps;
       result.recent_breadcrumbs = breadcrumbs;
     }
