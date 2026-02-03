@@ -67,7 +67,7 @@ import { getTasksForThreadWithHistory, type ClaudeTask } from "../utils/tasks.ts
 export type TabId = "threads" | "bugs" | "reflections" | "next-ups" | "drones";
 
 // Pane identifiers for focus management within the threads tab
-export type PaneId = "list" | "plan" | "steps" | "crumbs";
+export type PaneId = "list" | "plan" | "steps" | "tasks" | "workers" | "logs" | "crumbs";
 
 // Status filter for thread list
 export type ThreadFilter = "all" | ThreadStatus;
@@ -150,6 +150,9 @@ export interface TuiState {
   // Worker state
   workers: Signal<Worker[]>;
   workerError: Signal<string>;
+  workerEvents: Signal<Map<string, WorkerEvent[]>>;
+  selectedWorkerIndex: Signal<number>;
+  selectedTaskIndex: Signal<number>;
 
   // Bug reports state
   bugReports: Signal<BugReport[]>;
@@ -177,6 +180,7 @@ export interface TuiState {
   threadListItems: Computed<ThreadListItem[]>;
   workersForSelectedThread: Computed<Worker[]>;
   threadWorkerCounts: Computed<Map<string, number>>;
+  workerEventsForSelectedThread: Computed<WorkerEvent[]>;
   selectedBug: Computed<BugReport | null>;
   filteredBugs: Computed<BugReport[]>;
   bugListItems: Computed<BugListItem[]>;
@@ -265,6 +269,9 @@ export function createTuiState(): TuiState {
   // Worker state
   const workers = new Signal<Worker[]>([]);
   const workerError = new Signal<string>("");
+  const workerEvents = new Signal<Map<string, WorkerEvent[]>>(new Map());
+  const selectedWorkerIndex = new Signal<number>(0);
+  const selectedTaskIndex = new Signal<number>(0);
 
   // Bug reports state
   const bugReports = new Signal<BugReport[]>([]);
@@ -353,6 +360,20 @@ export function createTuiState(): TuiState {
       }
     }
     return counts;
+  });
+
+  // Computed: aggregated worker events for selected thread (sorted by timestamp, most recent first)
+  const workerEventsForSelectedThread = new Computed<WorkerEvent[]>(() => {
+    const threadWorkers = workersForSelectedThread.value;
+    const eventsMap = workerEvents.value;
+    const allEvents: WorkerEvent[] = [];
+    for (const worker of threadWorkers) {
+      const events = eventsMap.get(worker.id) || [];
+      allEvents.push(...events);
+    }
+    return allEvents
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 100);
   });
 
   // Computed: thread list items with display data
@@ -517,6 +538,9 @@ export function createTuiState(): TuiState {
     selectedCrumbIndex,
     workers,
     workerError,
+    workerEvents,
+    selectedWorkerIndex,
+    selectedTaskIndex,
     bugReports,
     selectedBugIndex,
     bugFilter,
@@ -536,6 +560,7 @@ export function createTuiState(): TuiState {
     threadListItems,
     workersForSelectedThread,
     threadWorkerCounts,
+    workerEventsForSelectedThread,
     selectedBug,
     filteredBugs,
     bugListItems,
@@ -604,6 +629,10 @@ export interface TuiActions {
   spawnWorker: (thread: Thread) => Promise<void>;
   killWorker: (workerId: string) => Promise<void>;
   killAllWorkersForThread: (thread: Thread) => Promise<void>;
+  loadWorkerEvents: (workerId: string) => void;
+  refreshWorkerEvents: () => void;
+  moveWorkerSelection: (delta: number) => void;
+  moveTaskSelection: (delta: number) => void;
 
   // Bug report operations
   loadBugReports: () => void;
@@ -805,7 +834,7 @@ export function createTuiActions(state: TuiState): TuiActions {
     },
 
     cycleFocus() {
-      const paneOrder: PaneId[] = ["list", "plan", "steps", "crumbs"];
+      const paneOrder: PaneId[] = ["list", "plan", "steps", "tasks", "workers", "logs", "crumbs"];
       const currentIndex = paneOrder.indexOf(state.focusedPane.value);
       const nextIndex = (currentIndex + 1) % paneOrder.length;
       state.focusedPane.value = paneOrder[nextIndex];
@@ -1232,6 +1261,42 @@ export function createTuiActions(state: TuiState): TuiActions {
       }
     },
 
+    loadWorkerEvents(workerId: string) {
+      const events = getWorkerEvents(workerId, { limit: 50 });
+      const eventsMap = new Map(state.workerEvents.value);
+      eventsMap.set(workerId, events);
+      state.workerEvents.value = eventsMap;
+    },
+
+    refreshWorkerEvents() {
+      const workers = state.workersForSelectedThread.value;
+      for (const worker of workers) {
+        if (worker.status === 'running') {
+          this.loadWorkerEvents(worker.id);
+        }
+      }
+    },
+
+    moveWorkerSelection(delta: number) {
+      const workers = state.workersForSelectedThread.value;
+      if (workers.length === 0) return;
+      const newIndex = Math.max(0, Math.min(
+        workers.length - 1,
+        state.selectedWorkerIndex.value + delta
+      ));
+      state.selectedWorkerIndex.value = newIndex;
+    },
+
+    moveTaskSelection(delta: number) {
+      const tasks = state.tasks.value;
+      if (tasks.length === 0) return;
+      const newIndex = Math.max(0, Math.min(
+        tasks.length - 1,
+        state.selectedTaskIndex.value + delta
+      ));
+      state.selectedTaskIndex.value = newIndex;
+    },
+
     loadBugReports() {
       state.isLoading.value = true;
       try {
@@ -1458,6 +1523,8 @@ export function createTuiActions(state: TuiState): TuiActions {
       const thread = state.selectedThread.value;
       if (thread) {
         this.loadThreadDetails(thread);
+        // Refresh worker events for live logs
+        this.refreshWorkerEvents();
       }
       // Also refresh bugs when on bugs tab
       if (state.activeTab.value === "bugs") {

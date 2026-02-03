@@ -14,7 +14,8 @@ import { createTuiState, createTuiActions } from "./state.ts";
 import type { TuiState, TuiActions } from "./state.ts";
 import { createTabBar } from "./components/tab-bar.ts";
 import { createThreadList } from "./components/thread-list.ts";
-import { createDetailPanel } from "./components/detail-panel.ts";
+import { createMiddlePanel } from "./components/middle-panel.ts";
+import { createRightPanel } from "./components/right-panel.ts";
 import { createStatusBar } from "./components/status-bar.ts";
 import { createFindInput } from "./components/find-input.ts";
 import { createThreadInput } from "./components/thread-input.ts";
@@ -242,33 +243,53 @@ export async function launchTui(_options: TuiOptions): Promise<void> {
       threadTabCleanups = [];
 
       const terminalSize = getCurrentSize();
-      const leftPanelWidth = getCurrentLeftPanelWidth();
 
+      // 3-column layout: 20% / 50% / 30%
+      const col1Width = Math.max(15, Math.floor(terminalSize.columns * 0.20));
+      const col3Width = Math.max(20, Math.floor(terminalSize.columns * 0.30));
+      const col2Width = terminalSize.columns - col1Width - col3Width - 2; // -2 for gaps
+
+      const col2Start = col1Width + 1;
+      const col3Start = col1Width + col2Width + 2;
+      const contentHeight = terminalSize.rows - 2;
+
+      // Column 1: Thread List (20%)
       const cleanupThreadList = createThreadList({
         tui,
         state,
         rectangle: {
           column: 0,
           row: 1,
-          width: leftPanelWidth,
-          height: terminalSize.rows - 2,
+          width: col1Width,
+          height: contentHeight,
         },
       });
 
-      const detailPanelColumn = leftPanelWidth + 1;
-      const detailPanelWidth = terminalSize.columns - detailPanelColumn;
-      const cleanupDetailPanel = createDetailPanel({
+      // Column 2: Middle Panel - Plan/Steps/Tasks (50%)
+      const cleanupMiddlePanel = createMiddlePanel({
         tui,
         state,
         rectangle: {
-          column: detailPanelColumn,
+          column: col2Start,
           row: 1,
-          width: detailPanelWidth,
-          height: terminalSize.rows - 2,
+          width: col2Width,
+          height: contentHeight,
         },
       });
 
-      threadTabCleanups.push(cleanupThreadList, cleanupDetailPanel);
+      // Column 3: Right Panel - Workers/Logs/Crumbs (30%)
+      const cleanupRightPanel = createRightPanel({
+        tui,
+        state,
+        rectangle: {
+          column: col3Start,
+          row: 1,
+          width: col3Width,
+          height: contentHeight,
+        },
+      });
+
+      threadTabCleanups.push(cleanupThreadList, cleanupMiddlePanel, cleanupRightPanel);
     };
 
     const renderBugsTab = () => {
@@ -1054,6 +1075,20 @@ function handlePaneKeyPress(
         const idx = state.selectedStepIndex.value;
         actions.moveStep(idx, idx - 1);
       }
+      break;
+
+    case "tasks":
+      if (isDown) actions.moveTaskSelection(1);
+      if (isUp) actions.moveTaskSelection(-1);
+      break;
+
+    case "workers":
+      if (isDown) actions.moveWorkerSelection(1);
+      if (isUp) actions.moveWorkerSelection(-1);
+      break;
+
+    case "logs":
+      // Logs auto-scroll, no navigation needed
       break;
 
     case "crumbs":

@@ -19,6 +19,9 @@ const PANE_HINTS: Record<PaneId, string> = {
   list: "j/k:nav n:new w:spawn W:kill a:archive p:pause m:merge",
   plan: "o:open i:import /:find Tab:focus",
   steps: "j/k:nav Space:toggle o:open J/K:reorder /:find",
+  tasks: "j/k:nav Tab:focus",
+  workers: "j/k:nav Tab:focus",
+  logs: "Tab:focus (auto-scroll)",
   crumbs: "j/k:nav o:open /:find Tab:focus",
 };
 
@@ -27,6 +30,9 @@ const PANE_NAMES: Record<PaneId, string> = {
   list: "THREADS",
   plan: "PLAN",
   steps: "STEPS",
+  tasks: "TASKS",
+  workers: "WORKERS",
+  logs: "LOGS",
   crumbs: "CRUMBS",
 };
 
