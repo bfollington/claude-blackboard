@@ -14,6 +14,7 @@ import {
 } from "../db/drone-queries.ts";
 import type { DroneStatus } from "../types/schema.ts";
 import { relativeTime, formatLocalTime } from "../utils/time.ts";
+import { outputJson } from "../utils/command.ts";
 
 interface DroneNewOptions {
   prompt?: string;
@@ -153,7 +154,7 @@ export async function droneNewCommand(
 
   if (options.json) {
     const drone = getDrone(droneId);
-    console.log(JSON.stringify(drone, null, 2));
+    outputJson(drone);
   } else if (!options.quiet) {
     console.log(`Drone "${name}" created (${droneId})`);
     console.log(`Max iterations: ${options.maxIterations ?? 100}`);
@@ -170,7 +171,7 @@ export function droneListCommand(options: DroneListOptions): void {
 
   if (drones.length === 0) {
     if (options.json) {
-      console.log(JSON.stringify([]));
+      outputJson([]));
     } else if (!options.quiet) {
       console.log("No drones found");
       console.log("\nCreate one with: blackboard drone new <name> --prompt \"...\"");
@@ -179,7 +180,7 @@ export function droneListCommand(options: DroneListOptions): void {
   }
 
   if (options.json) {
-    console.log(JSON.stringify(drones, null, 2));
+    outputJson(drones);
     return;
   }
 
@@ -217,7 +218,7 @@ export function droneShowCommand(name: string, options: DroneShowOptions): void 
 
   if (options.json) {
     const sessions = listDroneSessions(name, 10);
-    console.log(JSON.stringify({ ...drone, recent_sessions: sessions }, null, 2));
+    outputJson({ ...drone, recent_sessions: sessions });
     return;
   }
 
@@ -475,7 +476,7 @@ export async function droneLogsCommand(
 
       for (const event of newEvents) {
         if (options.json) {
-          console.log(JSON.stringify(event));
+          outputJson(event));
         } else {
           const timestamp = new Date(event.timestamp).toISOString();
           const prefix = `[${timestamp}] [iter ${event.iteration}] [${event.event_type}]`;
@@ -510,7 +511,7 @@ export async function droneLogsCommand(
     }
 
     if (options.json) {
-      console.log(JSON.stringify(events, null, 2));
+      outputJson(events);
     } else {
       for (const event of events) {
         const timestamp = new Date(event.timestamp).toISOString();
