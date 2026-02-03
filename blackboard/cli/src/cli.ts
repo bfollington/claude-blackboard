@@ -145,20 +145,21 @@ const droneCommand = new Command()
   .reset()
   .command("show", "Show drone details and recent sessions")
   .arguments("<name:string>")
-  .action(async (options: { json?: boolean; quiet?: boolean }, name: string) => {
-    await droneShowCommand(name, { json: options.json, quiet: options.quiet });
+  .option("--json", "Output in JSON format")
+  .action(async (options: { json?: boolean }, name: string) => {
+    await droneShowCommand(name, { json: options.json });
   })
   .reset()
   .command("edit", "Edit drone prompt in $EDITOR")
   .arguments("<name:string>")
-  .action(async (options: { quiet?: boolean }, name: string) => {
-    await droneEditCommand(name, { quiet: options.quiet });
+  .action(async (_options: void, name: string) => {
+    await droneEditCommand(name, {});
   })
   .reset()
   .command("archive", "Archive a drone (soft delete)")
   .arguments("<name:string>")
-  .action(async (options: { quiet?: boolean }, name: string) => {
-    await droneArchiveCommand(name, { quiet: options.quiet });
+  .action(async (_options: void, name: string) => {
+    await droneArchiveCommand(name, {});
   })
   .reset()
   .command("delete", "Delete a drone permanently")
@@ -194,8 +195,8 @@ const droneCommand = new Command()
   .reset()
   .command("stop", "Stop a running drone session")
   .arguments("<name:string>")
-  .action(async (options: { quiet?: boolean }, name: string) => {
-    await droneStopCommand(name, { quiet: options.quiet });
+  .action(async (_options: void, name: string) => {
+    await droneStopCommand(name, {});
   })
   .reset()
   .command("logs", "View logs for a running drone")
