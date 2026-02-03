@@ -230,15 +230,17 @@ export function deleteDrone(nameOrId: string): void {
  * @param droneId - Drone ID
  * @param workerId - Worker ID (optional, can be set later)
  * @param gitBranch - Git branch for this session
+ * @param sessionId - Optional pre-generated session ID (generates one if not provided)
  * @returns The created session's ID
  */
 export function createDroneSession(
   droneId: string,
   workerId: string | null,
-  gitBranch: string | null
+  gitBranch: string | null,
+  sessionId?: string
 ): string {
   const db = getDb();
-  const sessionId = generateId();
+  const finalSessionId = sessionId ?? generateId();
 
   db.exec("BEGIN IMMEDIATE");
 
@@ -252,14 +254,14 @@ export function createDroneSession(
       )
     `);
     stmt.run({
-      id: sessionId,
+      id: finalSessionId,
       drone_id: droneId,
       worker_id: workerId,
       git_branch: gitBranch,
     });
 
     db.exec("COMMIT");
-    return sessionId;
+    return finalSessionId;
   } catch (error) {
     db.exec("ROLLBACK");
     throw error;

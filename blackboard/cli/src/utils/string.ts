@@ -1,5 +1,5 @@
 /**
- * String utilities for thread name generation.
+ * String utilities for thread name generation and TUI display.
  */
 
 /**
@@ -19,4 +19,20 @@ export function toKebabCase(text: string): string {
     .replace(/[^a-z0-9]+/g, "-") // Replace non-alphanumeric with hyphens
     .replace(/^-+|-+$/g, "") // Trim leading/trailing hyphens
     .substring(0, 50);
+}
+
+/**
+ * Pad or truncate a line to an exact width.
+ * If the text is longer than width, it's truncated.
+ * If shorter, it's padded with spaces.
+ *
+ * @param text - Input text
+ * @param width - Target width
+ * @returns String of exactly `width` characters
+ */
+export function padLine(text: string, width: number): string {
+  if (text.length >= width) {
+    return text.slice(0, width);
+  }
+  return text + " ".repeat(width - text.length);
 }

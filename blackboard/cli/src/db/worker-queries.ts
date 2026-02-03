@@ -191,11 +191,10 @@ export function cleanupWorkerRecords(): number {
       WHERE status IN ('completed', 'failed', 'killed')
         AND (julianday('now') - julianday(created_at)) * 86400 > 86400
     `);
-    const result = stmt.run();
+    stmt.run();
 
     db.exec("COMMIT");
 
-    // Return number of changes
     return db.changes;
   } catch (error) {
     db.exec("ROLLBACK");

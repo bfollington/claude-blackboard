@@ -9,6 +9,7 @@ import { Signal } from "https://deno.land/x/tui@2.1.11/src/signals/mod.ts";
 import { crayon } from "https://deno.land/x/crayon@3.3.3/mod.ts";
 import type { Tui } from "https://deno.land/x/tui@2.1.11/mod.ts";
 import type { TuiState, DroneListItem } from "../state.ts";
+import { padLine } from "../../utils/string.ts";
 
 export interface DroneListOptions {
   tui: Tui;
@@ -117,16 +118,6 @@ export function createDroneList(options: DroneListOptions): () => void {
       component.destroy();
     }
   };
-}
-
-/**
- * Pad a line to exact width.
- */
-function padLine(text: string, width: number): string {
-  if (text.length >= width) {
-    return text.slice(0, width);
-  }
-  return text + " ".repeat(width - text.length);
 }
 
 /**
