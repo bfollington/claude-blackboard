@@ -20,6 +20,7 @@ import {
 import { generateId } from "../utils/id.ts";
 import { getCurrentGitBranch } from "../utils/git.ts";
 import { relativeTime, formatLocalTime } from "../utils/time.ts";
+import { outputJson } from "../utils/command.ts";
 import type { Thread, ThreadStatus } from "../types/schema.ts";
 
 interface ThreadNewOptions {
@@ -96,7 +97,7 @@ export async function threadNewCommand(
   });
 
   if (options.json) {
-    console.log(JSON.stringify({ id: threadId, name, git_branch: gitBranch }));
+    outputJson({ id: threadId, name, git_branch: gitBranch }));
   } else if (!options.quiet) {
     console.log(`Thread "${name}" created (${threadId})`);
     if (gitBranch) {
@@ -119,7 +120,7 @@ export async function threadListCommand(
 
   if (threads.length === 0) {
     if (options.json) {
-      console.log(JSON.stringify([]));
+      outputJson([]));
     } else if (!options.quiet) {
       console.log("No threads found");
       console.log("\nCreate one with: blackboard thread new <name>");
@@ -139,7 +140,7 @@ export async function threadListCommand(
       }
       return { ...t, pending_steps: pendingCount };
     });
-    console.log(JSON.stringify(enriched, null, 2));
+    outputJson(enriched);
     return;
   }
 
@@ -212,7 +213,7 @@ export async function threadStatusCommand(
     const bugs = getOpenBugReports(5);
     result.open_bugs = bugs;
 
-    console.log(JSON.stringify(result, null, 2));
+    outputJson(result);
     return;
   }
 

@@ -13,6 +13,7 @@ import {
 import { formatTable } from "../output/table.ts";
 import { formatLocalTime, relativeTime } from "../utils/time.ts";
 import { getTasksForThreadWithHistory } from "../utils/tasks.ts";
+import { outputJson } from "../utils/command.ts";
 
 interface StatusOptions {
   db?: string;
@@ -101,7 +102,7 @@ export async function statusCommand(options: StatusOptions): Promise<void> {
         summary: b.summary,
       })),
     };
-    console.log(JSON.stringify(data, null, 2));
+    outputJson(data);
     return;
   }
 

@@ -61,3 +61,13 @@ export function quietLog(message: string, quiet?: boolean): void {
     console.log(message);
   }
 }
+
+/**
+ * Outputs data as formatted JSON to console.
+ * Uses consistent formatting with 2-space indentation.
+ *
+ * @param data - The data to output as JSON
+ */
+export function outputJson(data: unknown): void {
+  console.log(JSON.stringify(data, null, 2));
+}

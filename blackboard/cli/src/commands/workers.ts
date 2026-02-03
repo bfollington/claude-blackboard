@@ -7,6 +7,7 @@ import { getActiveWorkers, updateWorkerStatus } from "../db/worker-queries.ts";
 import { reconcileWorkers, isDockerAvailable } from "../docker/client.ts";
 import { relativeTime } from "../utils/time.ts";
 import type { Worker } from "../types/schema.ts";
+import { outputJson } from "../utils/command.ts";
 
 interface WorkersOptions {
   db?: string;
@@ -53,7 +54,7 @@ export async function workersCommand(
 
   if (workers.length === 0) {
     if (options.json) {
-      console.log(JSON.stringify([]));
+      outputJson([]));
     } else if (!options.quiet) {
       console.log("No workers found");
     }
@@ -61,7 +62,7 @@ export async function workersCommand(
   }
 
   if (options.json) {
-    console.log(JSON.stringify(workers, null, 2));
+    outputJson(workers);
     return;
   }
 

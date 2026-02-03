@@ -14,7 +14,7 @@ import {
   getMaxStepOrder,
   getPlanById,
 } from "../db/queries.ts";
-import { getTargetPlanIdFromArg, quietLog } from "../utils/command.ts";
+import { getTargetPlanIdFromArg, quietLog, outputJson } from "../utils/command.ts";
 import type { StepStatus } from "../types/schema.ts";
 
 interface StepListOptions {
@@ -98,7 +98,7 @@ export async function stepListCommand(
 
   if (steps.length === 0) {
     if (options.json) {
-      console.log(JSON.stringify([]));
+      outputJson([]));
     } else if (!options.quiet) {
       console.log("No steps found");
     }
@@ -106,7 +106,7 @@ export async function stepListCommand(
   }
 
   if (options.json) {
-    console.log(JSON.stringify(steps, null, 2));
+    outputJson(steps);
     return;
   }
 

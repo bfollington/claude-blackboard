@@ -4,6 +4,7 @@
 
 import { getDb } from "../db/connection.ts";
 import { formatTable } from "../output/table.ts";
+import { outputJson } from "../utils/command.ts";
 
 interface QueryOptions {
   db?: string;
@@ -28,7 +29,7 @@ export async function queryCommand(
     const results = stmt.all();
 
     if (options.json) {
-      console.log(JSON.stringify(results, null, 2));
+      outputJson(results);
       return;
     }
 
