@@ -30,7 +30,6 @@ import {
   workersCommand,
   logsCommand,
   killCommand,
-  spawnCommand,
   drainCommand,
   farmCommand,
   dashboardCommand,
@@ -456,20 +455,6 @@ export const cli = new Command()
   .option("--build", "Build worker image before spawning")
   .action(async (options, threadName) => {
     await workCommand(threadName, options);
-  })
-  .reset()
-
-  .command("spawn", "Spawn a worker container for a thread (alias for 'work')")
-  .arguments("<thread-name:string>")
-  .option("--auth <mode:string>", "Auth mode: oauth, env, or config (auto-detects if omitted)")
-  .option("--api-key <key:string>", "Anthropic API key")
-  .option("--repo <path:string>", "Git workspace to mount")
-  .option("--max-iterations <n:number>", "Max iterations", { default: 50 })
-  .option("--memory <size:string>", "Container memory limit", { default: "512m" })
-  .option("--image <name:string>", "Worker image", { default: "blackboard-worker:latest" })
-  .option("--build", "Build worker image before spawning")
-  .action(async (options, threadName) => {
-    await spawnCommand(threadName, options);
   })
   .reset()
 

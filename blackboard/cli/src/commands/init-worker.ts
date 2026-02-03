@@ -117,7 +117,7 @@ export async function initWorkerCommand(options: InitWorkerOptions): Promise<voi
       console.log(`Created ${dockerfilePath}`);
       console.log("\nNext steps:");
       console.log("1. Edit Dockerfile.worker to add your project's dependencies");
-      console.log("2. Build the image: blackboard spawn <thread-name> --build");
+      console.log("2. Build the image: blackboard work <thread-name> --build");
       console.log("\nThe worker will use this Dockerfile instead of the default.");
     }
   } catch (error) {
