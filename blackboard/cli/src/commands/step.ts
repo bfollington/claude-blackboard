@@ -98,7 +98,7 @@ export async function stepListCommand(
 
   if (steps.length === 0) {
     if (options.json) {
-      outputJson([]));
+      outputJson([]);
     } else if (!options.quiet) {
       console.log("No steps found");
     }

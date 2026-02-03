@@ -171,7 +171,7 @@ export function droneListCommand(options: DroneListOptions): void {
 
   if (drones.length === 0) {
     if (options.json) {
-      outputJson([]));
+      outputJson([]);
     } else if (!options.quiet) {
       console.log("No drones found");
       console.log("\nCreate one with: blackboard drone new <name> --prompt \"...\"");
@@ -476,7 +476,7 @@ export async function droneLogsCommand(
 
       for (const event of newEvents) {
         if (options.json) {
-          outputJson(event));
+          outputJson(event);
         } else {
           const timestamp = new Date(event.timestamp).toISOString();
           const prefix = `[${timestamp}] [iter ${event.iteration}] [${event.event_type}]`;

@@ -97,7 +97,7 @@ export async function threadNewCommand(
   });
 
   if (options.json) {
-    outputJson({ id: threadId, name, git_branch: gitBranch }));
+    outputJson({ id: threadId, name, git_branch: gitBranch });
   } else if (!options.quiet) {
     console.log(`Thread "${name}" created (${threadId})`);
     if (gitBranch) {
@@ -120,7 +120,7 @@ export async function threadListCommand(
 
   if (threads.length === 0) {
     if (options.json) {
-      outputJson([]));
+      outputJson([]);
     } else if (!options.quiet) {
       console.log("No threads found");
       console.log("\nCreate one with: blackboard thread new <name>");

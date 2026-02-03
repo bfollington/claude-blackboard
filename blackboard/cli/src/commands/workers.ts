@@ -54,7 +54,7 @@ export async function workersCommand(
 
   if (workers.length === 0) {
     if (options.json) {
-      outputJson([]));
+      outputJson([]);
     } else if (!options.quiet) {
       console.log("No workers found");
     }
