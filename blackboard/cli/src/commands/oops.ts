@@ -4,7 +4,8 @@
  */
 
 import { getDb } from "../db/connection.ts";
-import { getCurrentThread } from "../db/queries.ts";
+import { getTargetPlanId, quietLog } from "../utils/command.ts";
+import { generateId } from "../utils/id.ts";
 
 interface OopsOptions {
   db?: string;
@@ -12,14 +13,6 @@ interface OopsOptions {
   symptoms?: string;
   fix?: string;
   tags?: string;
-}
-
-/**
- * Gets the plan ID from the current thread (most recently touched).
- */
-function getTargetPlanId(): string | null {
-  const thread = getCurrentThread();
-  return thread?.current_plan_id ?? null;
 }
 
 /**
@@ -38,7 +31,7 @@ export async function oopsCommand(
   const planId = getTargetPlanId();
 
   // Generate ID
-  const corrId = crypto.randomUUID().replace(/-/g, "").substring(0, 8);
+  const corrId = generateId();
 
   // Insert correction
   const stmt = db.prepare(`
@@ -59,7 +52,5 @@ export async function oopsCommand(
     tags: options.tags ?? null,
   });
 
-  if (!options.quiet) {
-    console.log(`Correction ${corrId} recorded`);
-  }
+  quietLog(`Correction ${corrId} recorded`, options.quiet);
 }

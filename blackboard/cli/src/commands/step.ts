@@ -5,9 +5,6 @@
 
 import { getDb } from "../db/connection.ts";
 import {
-  getCurrentThread,
-  resolveThread,
-  getPlanById,
   getStepsForPlan,
   getStepById,
   insertStep,
@@ -15,7 +12,9 @@ import {
   updateStepStatus,
   updateStepDescription,
   getMaxStepOrder,
+  getPlanById,
 } from "../db/queries.ts";
+import { getTargetPlanIdFromArg, quietLog } from "../utils/command.ts";
 import type { StepStatus } from "../types/schema.ts";
 
 interface StepListOptions {
@@ -52,34 +51,6 @@ interface StepReorderOptions {
 }
 
 /**
- * Gets the plan ID to use from a thread.
- * If threadOrPlan is provided, tries to resolve it as a thread name/ID first,
- * then falls back to treating it as a plan ID.
- * Otherwise uses the current thread (most recently touched).
- */
-function getTargetPlanId(threadOrPlan?: string): string | null {
-  if (threadOrPlan) {
-    // Try to resolve as thread first
-    const thread = resolveThread(threadOrPlan);
-    if (thread?.current_plan_id) {
-      return thread.current_plan_id;
-    }
-
-    // Try as plan ID directly
-    const plan = getPlanById(threadOrPlan);
-    if (plan) {
-      return plan.id;
-    }
-
-    return null;
-  }
-
-  // No explicit arg - use current thread's plan
-  const thread = getCurrentThread();
-  return thread?.current_plan_id ?? null;
-}
-
-/**
  * Formats a status indicator for display.
  */
 function formatStatusIndicator(status: StepStatus): string {
@@ -111,7 +82,7 @@ export async function stepListCommand(
   const db = getDb(options.db);
 
   // Get target plan
-  const planId = getTargetPlanId(threadOrPlan);
+  const planId = getTargetPlanIdFromArg(threadOrPlan);
   if (!planId) {
     console.error("Error: No active plan or thread found");
     Deno.exit(1);
@@ -167,7 +138,7 @@ export async function stepAddCommand(
   const db = getDb(options.db);
 
   // Get target plan (current thread only, no explicit plan arg)
-  const planId = getTargetPlanId();
+  const planId = getTargetPlanIdFromArg();
   if (!planId) {
     console.error("Error: No active plan or thread found");
     Deno.exit(1);

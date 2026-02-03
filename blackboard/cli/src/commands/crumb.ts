@@ -4,7 +4,8 @@
  */
 
 import { getDb } from "../db/connection.ts";
-import { getCurrentThread } from "../db/queries.ts";
+import { getTargetPlanId, quietLog } from "../utils/command.ts";
+import { generateId } from "../utils/id.ts";
 
 interface CrumbOptions {
   db?: string;
@@ -14,14 +15,6 @@ interface CrumbOptions {
   issues?: string;
   next?: string;
   agent?: string;
-}
-
-/**
- * Gets the plan ID from the current thread (most recently touched).
- */
-function getTargetPlanId(): string | null {
-  const thread = getCurrentThread();
-  return thread?.current_plan_id ?? null;
 }
 
 /**
@@ -44,7 +37,7 @@ export async function crumbCommand(
   }
 
   // Generate ID
-  const crumbId = crypto.randomUUID().replace(/-/g, "").substring(0, 8);
+  const crumbId = generateId();
 
   // Insert breadcrumb
   const stmt = db.prepare(`
@@ -69,7 +62,5 @@ export async function crumbCommand(
     next_context: options.next ?? null,
   });
 
-  if (!options.quiet) {
-    console.log(`Breadcrumb ${crumbId} recorded`);
-  }
+  quietLog(`Breadcrumb ${crumbId} recorded`, options.quiet);
 }

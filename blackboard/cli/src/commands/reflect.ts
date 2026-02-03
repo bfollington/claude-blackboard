@@ -4,20 +4,13 @@
  */
 
 import { getDb } from "../db/connection.ts";
-import { getCurrentThread } from "../db/queries.ts";
+import { getTargetPlanId, quietLog } from "../utils/command.ts";
+import { generateId } from "../utils/id.ts";
 
 interface ReflectOptions {
   db?: string;
   quiet?: boolean;
   trigger?: string;
-}
-
-/**
- * Gets the plan ID from the current thread (most recently touched).
- */
-function getTargetPlanId(): string | null {
-  const thread = getCurrentThread();
-  return thread?.current_plan_id ?? null;
 }
 
 /**
@@ -57,7 +50,7 @@ export async function reflectCommand(
   }
 
   // Generate ID
-  const refId = crypto.randomUUID().replace(/-/g, "").substring(0, 8);
+  const refId = generateId();
 
   // Determine trigger type
   const trigger = options.trigger ?? "manual";
@@ -79,7 +72,5 @@ export async function reflectCommand(
     content: reflectionContent,
   });
 
-  if (!options.quiet) {
-    console.log(`Reflection ${refId} recorded`);
-  }
+  quietLog(`Reflection ${refId} recorded`, options.quiet);
 }

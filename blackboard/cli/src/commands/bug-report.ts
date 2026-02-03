@@ -4,21 +4,14 @@
  */
 
 import { getDb } from "../db/connection.ts";
-import { getCurrentThread } from "../db/queries.ts";
+import { getTargetPlanId, quietLog } from "../utils/command.ts";
+import { generateId } from "../utils/id.ts";
 
 interface BugReportOptions {
   db?: string;
   quiet?: boolean;
   steps?: string;
   evidence?: string;
-}
-
-/**
- * Gets the plan ID from the current thread (most recently touched).
- */
-function getTargetPlanId(): string | null {
-  const thread = getCurrentThread();
-  return thread?.current_plan_id ?? null;
 }
 
 /**
@@ -44,7 +37,7 @@ export async function bugReportCommand(
   const planId = getTargetPlanId();
 
   // Generate ID
-  const bugId = crypto.randomUUID().replace(/-/g, "").substring(0, 8);
+  const bugId = generateId();
 
   // Insert bug report
   const stmt = db.prepare(`
@@ -65,7 +58,5 @@ export async function bugReportCommand(
     status: "open",
   });
 
-  if (!options.quiet) {
-    console.log(`Bug report ${bugId} filed`);
-  }
+  quietLog(`Bug report ${bugId} filed`, options.quiet);
 }
