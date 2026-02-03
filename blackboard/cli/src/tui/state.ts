@@ -1262,10 +1262,17 @@ export function createTuiActions(state: TuiState): TuiActions {
     },
 
     loadWorkerEvents(workerId: string) {
-      const events = getWorkerEvents(workerId, { limit: 50 });
-      const eventsMap = new Map(state.workerEvents.value);
-      eventsMap.set(workerId, events);
-      state.workerEvents.value = eventsMap;
+      try {
+        const events = getWorkerEvents(workerId, { limit: 50 });
+        const eventsMap = new Map(state.workerEvents.value);
+        eventsMap.set(workerId, events);
+        state.workerEvents.value = eventsMap;
+      } catch (error) {
+        // Database may be temporarily locked - ignore and retry on next refresh
+        if (!(error instanceof Error && error.message.includes("malformed"))) {
+          console.error("Error loading worker events:", error);
+        }
+      }
     },
 
     refreshWorkerEvents() {
@@ -1518,25 +1525,32 @@ export function createTuiActions(state: TuiState): TuiActions {
     },
 
     refreshAll() {
-      this.loadThreads();
-      this.loadWorkers();
-      const thread = state.selectedThread.value;
-      if (thread) {
-        this.loadThreadDetails(thread);
-        // Refresh worker events for live logs
-        this.refreshWorkerEvents();
-      }
-      // Also refresh bugs when on bugs tab
-      if (state.activeTab.value === "bugs") {
-        this.loadBugReports();
-      }
-      // Also refresh next-ups when on next-ups tab
-      if (state.activeTab.value === "next-ups") {
-        this.loadNextUps();
-      }
-      // Also refresh drones when on drones tab
-      if (state.activeTab.value === "drones") {
-        this.loadDrones();
+      try {
+        this.loadThreads();
+        this.loadWorkers();
+        const thread = state.selectedThread.value;
+        if (thread) {
+          this.loadThreadDetails(thread);
+          // Refresh worker events for live logs
+          this.refreshWorkerEvents();
+        }
+        // Also refresh bugs when on bugs tab
+        if (state.activeTab.value === "bugs") {
+          this.loadBugReports();
+        }
+        // Also refresh next-ups when on next-ups tab
+        if (state.activeTab.value === "next-ups") {
+          this.loadNextUps();
+        }
+        // Also refresh drones when on drones tab
+        if (state.activeTab.value === "drones") {
+          this.loadDrones();
+        }
+      } catch (error) {
+        // Database may be temporarily locked by concurrent writes - will retry on next interval
+        if (!(error instanceof Error && error.message.includes("malformed"))) {
+          console.error("Error during refresh:", error);
+        }
       }
     },
 
@@ -1779,6 +1793,11 @@ export function createTuiActions(state: TuiState): TuiActions {
         if (selected) {
           this.loadDroneDetails(selected);
         }
+      } catch (error) {
+        // Database may be temporarily locked by drone - ignore and retry on next refresh
+        if (!(error instanceof Error && error.message.includes("malformed"))) {
+          console.error("Error loading drones:", error);
+        }
       } finally {
         state.isLoading.value = false;
       }
@@ -1786,17 +1805,24 @@ export function createTuiActions(state: TuiState): TuiActions {
 
     loadDroneDetails(drone: Drone) {
       // Load worker events for the current session (if any)
-      const currentSession = getCurrentSession(drone.id);
-      if (currentSession?.worker_id) {
-        const events = getWorkerEvents(currentSession.worker_id, { limit: 50 });
-        const eventsMap = new Map(state.droneEvents.value);
-        eventsMap.set(drone.id, events);
-        state.droneEvents.value = eventsMap;
-      } else {
-        // Clear events if no active session
-        const eventsMap = new Map(state.droneEvents.value);
-        eventsMap.set(drone.id, []);
-        state.droneEvents.value = eventsMap;
+      try {
+        const currentSession = getCurrentSession(drone.id);
+        if (currentSession?.worker_id) {
+          const events = getWorkerEvents(currentSession.worker_id, { limit: 50 });
+          const eventsMap = new Map(state.droneEvents.value);
+          eventsMap.set(drone.id, events);
+          state.droneEvents.value = eventsMap;
+        } else {
+          // Clear events if no active session
+          const eventsMap = new Map(state.droneEvents.value);
+          eventsMap.set(drone.id, []);
+          state.droneEvents.value = eventsMap;
+        }
+      } catch (error) {
+        // Database may be temporarily locked by drone - ignore and retry on next refresh
+        if (!(error instanceof Error && error.message.includes("malformed"))) {
+          console.error("Error loading drone details:", error);
+        }
       }
     },
 

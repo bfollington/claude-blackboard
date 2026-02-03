@@ -18,8 +18,11 @@ if (!WORKER_ID || isNaN(ITERATION) || !DB_PATH) {
   Deno.exit(1);
 }
 
-// Open database connection
+// Open database connection with proper concurrency settings
 const db = new Database(DB_PATH);
+db.exec("PRAGMA journal_mode = WAL");
+db.exec("PRAGMA busy_timeout = 30000");
+db.exec("PRAGMA synchronous = NORMAL");
 
 /**
  * Insert a worker event into the database.
