@@ -9,6 +9,7 @@ import type { Tui } from "https://deno.land/x/tui@2.1.11/mod.ts";
 import type { TuiState } from "../state.ts";
 import type { WorkerEvent } from "../../types/schema.ts";
 import { relativeTime as relativeTimeUtil } from "../../utils/time.ts";
+import { padLine } from "../../utils/string.ts";
 
 export interface DroneDetailOptions {
   tui: Tui;
@@ -440,16 +441,6 @@ export function createDroneDetail(options: DroneDetailOptions): () => void {
       component.destroy();
     }
   };
-}
-
-/**
- * Pad a line to exact width.
- */
-function padLine(text: string, width: number): string {
-  if (text.length >= width) {
-    return text.slice(0, width);
-  }
-  return text + " ".repeat(width - text.length);
 }
 
 /**
