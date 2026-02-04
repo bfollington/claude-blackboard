@@ -287,7 +287,7 @@ Do NOT output the completion promise until all work is truly done."
   fi
 
   # Also check if plan is marked complete in database
-  PLAN_COMPLETE=$(blackboard --db "$DB_PATH" query \
+  PLAN_COMPLETE=$(blackboard --db "$DB_PATH" query --quiet \
     "SELECT 1 FROM plans p JOIN threads t ON p.id = t.current_plan_id WHERE t.name = '$THREAD_NAME' AND p.status = 'completed' LIMIT 1" 2>/dev/null || echo "")
   if [ -n "$PLAN_COMPLETE" ]; then
     MSG="Plan completed (detected via database) after $iteration iterations"

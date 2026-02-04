@@ -177,7 +177,7 @@ Work efficiently and record your progress."
   git push origin "$BRANCH" 2>/dev/null || true
 
   # Check if session should stop (stop signal from database)
-  SHOULD_STOP=$(blackboard --db "$DB_PATH" query \
+  SHOULD_STOP=$(blackboard --db "$DB_PATH" query --quiet \
     "SELECT 1 FROM drone_sessions WHERE id = '$SESSION_ID' AND status != 'running' LIMIT 1" 2>/dev/null || echo "")
   if [ -n "$SHOULD_STOP" ]; then
     MSG="Session stopped by external signal after $iteration iterations"
