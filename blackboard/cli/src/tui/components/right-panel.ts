@@ -469,7 +469,7 @@ function formatCrumbHeader(
   query: string = "",
   isCurrent: boolean = false
 ): string {
-  const shortId = crumb.id.slice(0, 7);
+  const shortId = crumb.id?.slice(0, 7) ?? "???????";
   const time = relativeTime(crumb.created_at);
   const agent = crumb.agent_type || "unknown";
   const selectionIndicator = isSelected ? (isFocused ? ">" : "*") : " ";
